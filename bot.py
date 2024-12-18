@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(as
 LEVERAGE = 25
 POSITION_SIZE_PERCENT = 0.25  # % of wallet balance to trade per coin
 TIMEFRAME = '3m'
-PROFIT_TARGET_PERCENT = 0.05  # 5% profit target
+PROFIT_TARGET_PERCENT = 0.06  # 5% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
 # Trading Pairs
@@ -160,6 +160,29 @@ def should_trade(symbol, model, scaler, data, balance):
         logging.error(f"Error determining trade signal for {symbol}: {e}")
         return None, 0
 
+def monitor_positions():
+    """
+    Monitor open positions and close them when the profit target is achieved.
+    """
+    try:
+        positions = exchange.fetch_positions()
+        for position in positions:
+            if float(position['contracts']) > 0:  # Active positions only
+                symbol = position['symbol']
+                unrealized_profit = float(position['unrealizedPnl'])
+                notional_value = float(position['initialMargin'])
+                fee_adjusted_profit = PROFIT_TARGET_PERCENT - 0.001  # Account for fees
+
+                logging.info(f"Monitoring {symbol}: Unrealized PnL={unrealized_profit}, Notional Value={notional_value}")
+
+                # Close position if profit target is achieved
+                if unrealized_profit >= notional_value * fee_adjusted_profit:
+                    logging.info(f"Profit target hit for {symbol}. Closing position.")
+                    side = 'sell' if position['side'] == 'long' else 'buy'
+                    place_order(symbol, side, abs(float(position['contracts'])))
+    except Exception as e:
+        logging.error(f"Error monitoring positions: {e}")
+
 # Main Trading Function
 def trade():
     logging.info("Starting bot...")
@@ -178,16 +201,18 @@ def trade():
                             model = load_model(model_path, compile=False)
                             scaler = joblib.load(scaler_path)
                             action, size = should_trade(symbol, model, scaler, data, balance)
-                            # print(f"{action} : {size}")
                             if action == 'buy':
                                 place_order(symbol, 'buy', size)
                             elif action == 'sell':
                                 place_order(symbol, 'sell', size)
                         else:
                             logging.warning(f"No LSTM model or scaler found for {symbol}")
+
+                # Monitor positions after trading
+                monitor_positions()
             else:
                 logging.info("Insufficient balance. Waiting for funds.")
-            time.sleep(30)
+            time.sleep(60)  # Adjust as needed
         except Exception as e:
             logging.error(f"Error in main loop: {e}")
             time.sleep(10)
