@@ -25,15 +25,17 @@ exchange = ccxt.binance({
 logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Parameters
-LEVERAGE = 25
-POSITION_SIZE_PERCENT = 0.25  # % of wallet balance to trade per coin
+LEVERAGE = 35
+POSITION_SIZE_PERCENT = 1.1  # % of wallet balance to trade per coin
 TIMEFRAME = '3m'
-PROFIT_TARGET_PERCENT = 0.06  # 5% profit target
+PROFIT_TARGET_PERCENT = 0.07  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
 # Trading Pairs
-TRADING_PAIRS = ["XRP/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT"]
-
+#TRADING_PAIRS = ["XRP/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT"]
+TRADING_PAIRS = ["USUAL/USDT", "MOVE/USDT", "VELODROME/USDT", "TROY/USDT",
+                     "FLUX/USDT","SCR/USDT","ENA/USDT","XRP/USDT", 
+                     "DOGE/USDT", "ADA/USDT"]
 # Fetch wallet balance
 def fetch_wallet_balance():
     try:
@@ -94,15 +96,68 @@ def prepare_lstm_input(data, scaler, n_steps=60):
         logging.error(f"Error preparing LSTM input: {e}")
         return None
 
-# Place Order
 def place_order(symbol, side, size):
+    """
+    Place an order with stop-loss functionality.
+    """
+    try:
+        # Fetch the current price for calculating stop loss
+        ticker = exchange.fetch_ticker(symbol)
+        current_price = ticker['last']
+
+        # Calculate stop price: 5% below for buy and 5% above for sell
+        if side == 'buy':
+            stop_price = current_price * 0.99  # Stop-loss price 2% below current price
+        elif side == 'sell':
+            stop_price = current_price * 1.01  # Stop-loss price 2% above current price
+        else:
+            raise ValueError(f"Invalid order side: {side}")
+
+        # Ensure leverage is set
+        exchange.set_leverage(LEVERAGE, symbol)
+
+        # Place the market order
+        market_order = exchange.create_order(symbol, 'market', side, size)
+        logging.info(f"Market order placed: {side} {size} {symbol} at {current_price}")
+
+        # Place the stop-loss order
+        params = {'stopPrice': stop_price}
+        stop_order = exchange.create_order(symbol, 'stop_market', 'sell' if side == 'buy' else 'buy', size, None, params)
+        logging.info(f"Stop-loss order placed: {'sell' if side == 'buy' else 'buy'} {size} {symbol} with stop price: {stop_price}")
+
+        return market_order, stop_order['id']
+
+    except Exception as e:
+        logging.error(f"Error placing order for {symbol}: {e}")
+        return None, None
+
+    
+
+def cancel_order(order_id):
+    """
+    Cancel a specific order by ID.
+    """
+    try:
+        exchange.cancel_order(order_id)
+        logging.info(f"Stop-loss order {order_id} canceled successfully.")
+    except Exception as e:
+        logging.error(f"Error canceling order {order_id}: {e}")
+
+
+
+#close order
+def close_order(symbol, side, size):
     try:
         exchange.set_leverage(LEVERAGE, symbol)
+        # exchange.create_order_with_take_profit_and_stop_loss()
         order = exchange.create_order(symbol, 'market', side, size)
         logging.info(f"Order placed: {side} {size} {symbol}")
         return order
     except Exception as e:
         logging.error(f"Error placing order for {symbol}: {e}")
+
+
+
 
 
 def validate_position_size(symbol, size, current_price):
@@ -150,10 +205,10 @@ def should_trade(symbol, model, scaler, data, balance):
         logging.info(f"Trade conditions for {symbol} - Predicted: {predicted_price}, Current: {current_price}, MA_10: {data['MA_10'].iloc[-1]}, MA_30: {data['MA_30'].iloc[-1]}, RSI: {data['RSI'].iloc[-1]}")
 
         # Buy Condition
-        if predicted_price > current_price and (data['MA_10'].iloc[-1] > data['MA_30'].iloc[-1]) and (data['RSI'].iloc[-1] < 35):
+        if predicted_price > current_price * 1.01 and (data['MA_10'].iloc[-1] > data['MA_30'].iloc[-1]) and (30 < data['RSI'].iloc[-1] < 50):
             return 'buy', position_size
-        # Sell Condition
-        elif predicted_price < current_price and data['RSI'].iloc[-1] > 68:
+        # Sell Condition (relaxed thresholds)
+        elif predicted_price < current_price * 0.99 and data['RSI'].iloc[-1] > 65:
             return 'sell', position_size
         return None, 0
     except Exception as e:
@@ -179,9 +234,22 @@ def monitor_positions():
                 if unrealized_profit >= notional_value * fee_adjusted_profit:
                     logging.info(f"Profit target hit for {symbol}. Closing position.")
                     side = 'sell' if position['side'] == 'long' else 'buy'
-                    place_order(symbol, side, abs(float(position['contracts'])))
+                    size = abs(float(position['contracts']))
+                    
+                    # Place the closing order
+                    close_order = exchange.create_order(symbol, 'market', side, size)
+                    logging.info(f"Position closed: {side} {size} {symbol}")
+
+                    # Cancel any active stop-loss orders
+                    open_orders = exchange.fetch_open_orders(symbol)
+                    for order in open_orders:
+                        if order['type'] == 'stop_market':
+                            logging.info(f"Cancelling stop-loss order for {symbol}: {order['id']}")
+                            exchange.cancel_order(order['id'], symbol)
+
     except Exception as e:
         logging.error(f"Error monitoring positions: {e}")
+
 
 # Main Trading Function
 def trade():
@@ -212,7 +280,7 @@ def trade():
                 monitor_positions()
             else:
                 logging.info("Insufficient balance. Waiting for funds.")
-            time.sleep(30)  # Adjust as needed
+            time.sleep(20)  # Adjust as needed
         except Exception as e:
             logging.error(f"Error in main loop: {e}")
             time.sleep(10)

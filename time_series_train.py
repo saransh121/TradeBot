@@ -58,7 +58,7 @@ def prepare_data(data, n_steps=60):
 # Train Model
 def train_model_for_pair(symbol):
     print(f"Training LSTM model for {symbol}...")
-    data = fetch_data(symbol, '3m', limit=1500)
+    data = fetch_data(symbol, '3m', limit=1000)
     if data is None or data.empty:
         print(f"No data available for {symbol}. Skipping.")
         return
@@ -101,6 +101,16 @@ def train_model_for_pair(symbol):
 
 # Train for all pairs
 if __name__ == "__main__":
-    TRADING_PAIRS = ["XRP/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT"]
+#USUAL/USDT
+#MOVE/USDT
+#VELODROME/USDT
+#TROY/USDT
+#KOMA/USDT
+#BIGTIME/USDT
+#FLUX/USDT
+#ETH/USDT
+#["XRP/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT"]
+    TRADING_PAIRS = ["USUAL/USDT", "MOVE/USDT", "VELODROME/USDT", "TROY/USDT","KOMA/USDT","BIGTIME/USDT"
+                     ,"FLUX/USDT","SCR/USDT","ENA/USDT","XRP/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT"]
     for pair in TRADING_PAIRS:
         train_model_for_pair(pair)

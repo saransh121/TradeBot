@@ -1,4 +1,12 @@
 import ccxt
 exchange = ccxt.binance()
 
-print(exchange.fetch_ohlcv('TRX/USDT', '15m', limit=100))
+#USUAL/USDT
+#MOVE/USDT
+#VELODROME/USDT
+#TROY/USDT
+#KOMA/USDT
+#BIGTIME/USDT
+#FLUX/USDT
+#ETH/USDT
+print(len(exchange.fetch_ohlcv('ETH/USDT', '3m', limit=1000)))
