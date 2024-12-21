@@ -27,7 +27,7 @@ logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(as
 # Parameters
 LEVERAGE = 35
 POSITION_SIZE_PERCENT = 1.1  # % of wallet balance to trade per coin
-TIMEFRAME = '15m'
+TIMEFRAME = '3m'
 PROFIT_TARGET_PERCENT = 0.07  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
@@ -204,23 +204,23 @@ def should_trade(symbol, model, scaler, data, balance):
 
         logging.info(f"Trade conditions for {symbol} - Predicted: {predicted_price}, Current: {current_price}, MA_10: {data['MA_10'].iloc[-1]}, MA_30: {data['MA_30'].iloc[-1]}, RSI: {data['RSI'].iloc[-1]}")
 
+        # Remove the proximity condition for buy and sell
         # Buy Condition
         if (
-            predicted_price > current_price * 1.01  # Predicted price is 1% higher
-            and (data['MA_10'].iloc[-1] > data['MA_30'].iloc[-1])  # Short-term MA above long-term MA
-            and (30 < data['RSI'].iloc[-1] < 50)  # RSI in a neutral to slightly oversold range
-            and (current_price - data['MA_10'].iloc[-1]) > -0.005 * current_price  # Price close to MA_10 or above
+            predicted_price > current_price * 1.01
+            and (data['MA_10'].iloc[-1] > data['MA_30'].iloc[-1])
+            and (30 < data['RSI'].iloc[-1] < 50)
         ):
             return 'buy', position_size
 
         # Sell Condition
         elif (
-            predicted_price < current_price * 0.99  # Predicted price is 1% lower
-            and data['RSI'].iloc[-1] > 65  # RSI indicates overbought conditions
-            and data['MA_10'].iloc[-1] < data['MA_30'].iloc[-1]  # Short-term MA below long-term MA
-            and (current_price - data['MA_10'].iloc[-1]) > 0.005 * current_price  # Price above MA_10 significantly
+            predicted_price < current_price * 0.99
+            and data['RSI'].iloc[-1] > 65
+            and data['MA_10'].iloc[-1] < data['MA_30'].iloc[-1]
         ):
             return 'sell', position_size
+
 
         return None, 0
     except Exception as e:
@@ -296,7 +296,7 @@ def trade():
                 monitor_positions()
             else:
                 logging.info("Insufficient balance. Waiting for funds.")
-            time.sleep(30)  # Adjust as needed
+            time.sleep(20)  # Adjust as needed
         except Exception as e:
             logging.error(f"Error in main loop: {e}")
             time.sleep(10)
