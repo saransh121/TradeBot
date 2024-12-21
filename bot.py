@@ -201,13 +201,16 @@ def should_trade(symbol, model, scaler, data, balance):
 
         position_size = (POSITION_SIZE_PERCENT * balance) / current_price
         position_size = validate_position_size(symbol, position_size, current_price)
+        atr = data['ATR'].iloc[-1]
+        buy_threshold = 1.01 + (atr / current_price * 0.05)  # Adjust by 10% of ATR
+        sell_threshold = 0.99 - (atr / current_price * 0.05)
 
         logging.info(f"Trade conditions for {symbol} - Predicted: {predicted_price}, Current: {current_price}, MA_10: {data['MA_10'].iloc[-1]}, MA_30: {data['MA_30'].iloc[-1]}, RSI: {data['RSI'].iloc[-1]}")
-
+        logging.info(f"buy threshold {buy_threshold} - sell threshold {sell_threshold}")
         # Remove the proximity condition for buy and sell
         # Buy Condition
         if (
-            predicted_price > current_price * 1.002
+            predicted_price > current_price * buy_threshold
             and (data['MA_10'].iloc[-1] > data['MA_30'].iloc[-1])
             and (30 < data['RSI'].iloc[-1] < 50)
         ):
@@ -215,7 +218,7 @@ def should_trade(symbol, model, scaler, data, balance):
 
         # Sell Condition
         elif (
-            predicted_price < current_price * 0.99
+            predicted_price < current_price * sell_threshold
             and data['RSI'].iloc[-1] > 63
             and data['MA_10'].iloc[-1] < data['MA_30'].iloc[-1]
         ):
