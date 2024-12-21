@@ -207,7 +207,7 @@ def should_trade(symbol, model, scaler, data, balance):
         # Remove the proximity condition for buy and sell
         # Buy Condition
         if (
-            predicted_price > current_price * 1.01
+            predicted_price > current_price * 1.02
             and (data['MA_10'].iloc[-1] > data['MA_30'].iloc[-1])
             and (30 < data['RSI'].iloc[-1] < 50)
         ):
@@ -215,7 +215,7 @@ def should_trade(symbol, model, scaler, data, balance):
 
         # Sell Condition
         elif (
-            predicted_price < current_price * 0.99
+            predicted_price < current_price * 0.98
             and data['RSI'].iloc[-1] > 65
             and data['MA_10'].iloc[-1] < data['MA_30'].iloc[-1]
         ):
