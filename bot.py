@@ -27,7 +27,7 @@ logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(as
 # Parameters
 LEVERAGE = 35
 POSITION_SIZE_PERCENT = 1.1  # % of wallet balance to trade per coin
-TIMEFRAME = '3m'
+TIMEFRAME = '15m'
 PROFIT_TARGET_PERCENT = 0.07  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
@@ -217,7 +217,7 @@ def should_trade(symbol, model, scaler, data, balance):
 
 def monitor_positions():
     """
-    Monitor open positions and close them when the profit target is achieved.
+    Monitor open positions and close them when the profit target is achieved or ROI is below -15%.
     """
     try:
         positions = exchange.fetch_positions()
@@ -230,9 +230,13 @@ def monitor_positions():
 
                 logging.info(f"Monitoring {symbol}: Unrealized PnL={unrealized_profit}, Notional Value={notional_value}")
 
-                # Close position if profit target is achieved
-                if unrealized_profit >= notional_value * fee_adjusted_profit:
-                    logging.info(f"Profit target hit for {symbol}. Closing position.")
+                # Close position if profit target is achieved or ROI is below -15%
+                if unrealized_profit >= notional_value * fee_adjusted_profit or unrealized_profit <= -notional_value * 0.15:
+                    if unrealized_profit >= notional_value * fee_adjusted_profit:
+                        logging.info(f"Profit target hit for {symbol}. Closing position.")
+                    elif unrealized_profit <= -notional_value * 0.15:
+                        logging.info(f"ROI below -15% for {symbol}. Closing position.")
+
                     side = 'sell' if position['side'] == 'long' else 'buy'
                     size = abs(float(position['contracts']))
                     
@@ -246,9 +250,9 @@ def monitor_positions():
                         if order['type'] == 'stop_market':
                             logging.info(f"Cancelling stop-loss order for {symbol}: {order['id']}")
                             exchange.cancel_order(order['id'], symbol)
-
     except Exception as e:
         logging.error(f"Error monitoring positions: {e}")
+
 
 
 # Main Trading Function
@@ -280,7 +284,7 @@ def trade():
                 monitor_positions()
             else:
                 logging.info("Insufficient balance. Waiting for funds.")
-            time.sleep(20)  # Adjust as needed
+            time.sleep(30)  # Adjust as needed
         except Exception as e:
             logging.error(f"Error in main loop: {e}")
             time.sleep(10)
