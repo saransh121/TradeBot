@@ -9,4 +9,5 @@ exchange = ccxt.binance()
 #BIGTIME/USDT
 #FLUX/USDT
 #ETH/USDT
-print(len(exchange.fetch_ohlcv('ETH/USDT', '3m', limit=1000)))
+#PEPE/USDT
+print((exchange.fetch_ohlcv('SHIB/USDT', '3m', limit=1000)))

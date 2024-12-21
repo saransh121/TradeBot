@@ -34,8 +34,8 @@ N_STEPS = 60  # For LSTM input sequence length
 # Trading Pairs
 #TRADING_PAIRS = ["XRP/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT"]
 TRADING_PAIRS = ["USUAL/USDT", "MOVE/USDT", "VELODROME/USDT", "TROY/USDT",
-                     "FLUX/USDT","SCR/USDT","ENA/USDT","XRP/USDT", 
-                     "DOGE/USDT", "ADA/USDT"]
+                     "PEPE/USDT","SCR/USDT","ENA/USDT","XRP/USDT", 
+                     "DOGE/USDT", "ADA/USDT","MOCA/USDT","SHIB/USDT"]
 # Fetch wallet balance
 def fetch_wallet_balance():
     try:
@@ -243,10 +243,10 @@ def monitor_positions():
                 logging.info(f"Monitoring {symbol}: Unrealized PnL={unrealized_profit}, Notional Value={notional_value}")
 
                 # Close position if profit target is achieved or ROI is below -15%
-                if unrealized_profit >= notional_value * fee_adjusted_profit or unrealized_profit <= -notional_value * 0.15:
+                if unrealized_profit >= notional_value * fee_adjusted_profit or unrealized_profit <= -notional_value * 0.12:
                     if unrealized_profit >= notional_value * fee_adjusted_profit:
                         logging.info(f"Profit target hit for {symbol}. Closing position.")
-                    elif unrealized_profit <= -notional_value * 0.15:
+                    elif unrealized_profit <= -notional_value * 0.12:
                         logging.info(f"ROI below -15% for {symbol}. Closing position.")
 
                     side = 'sell' if position['side'] == 'long' else 'buy'

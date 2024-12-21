@@ -111,7 +111,7 @@ if __name__ == "__main__":
 #ETH/USDT
 #["XRP/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT"]
     TRADING_PAIRS = ["USUAL/USDT", "MOVE/USDT", "VELODROME/USDT", "TROY/USDT",
-                     "FLUX/USDT","SCR/USDT","ENA/USDT","XRP/USDT", 
-                     "DOGE/USDT", "ADA/USDT"]
+                     "PEPE/USDT","SCR/USDT","ENA/USDT","XRP/USDT", 
+                     "DOGE/USDT", "ADA/USDT","MOCA/USDT","SHIB/USDT"]
     for pair in TRADING_PAIRS:
         train_model_for_pair(pair)
