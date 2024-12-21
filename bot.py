@@ -25,8 +25,8 @@ exchange = ccxt.binance({
 logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Parameters
-LEVERAGE = 35
-POSITION_SIZE_PERCENT = 1.1  # % of wallet balance to trade per coin
+LEVERAGE = 40
+POSITION_SIZE_PERCENT = 1.5  # % of wallet balance to trade per coin
 TIMEFRAME = '3m'
 PROFIT_TARGET_PERCENT = 0.07  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
@@ -34,8 +34,8 @@ N_STEPS = 60  # For LSTM input sequence length
 # Trading Pairs
 #TRADING_PAIRS = ["XRP/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT"]
 TRADING_PAIRS = ["USUAL/USDT", "MOVE/USDT", "VELODROME/USDT", "TROY/USDT",
-                     "PEPE/USDT","SCR/USDT","ENA/USDT","XRP/USDT", 
-                     "DOGE/USDT", "ADA/USDT","MOCA/USDT","SHIB/USDT"]
+                     "SCR/USDT","ENA/USDT","XRP/USDT", 
+                     "DOGE/USDT", "ADA/USDT","MOCA/USDT"]
 # Fetch wallet balance
 def fetch_wallet_balance():
     try:
