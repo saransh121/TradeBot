@@ -25,8 +25,8 @@ exchange = ccxt.binance({
 logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Parameters
-LEVERAGE = 40
-POSITION_SIZE_PERCENT = 1.5  # % of wallet balance to trade per coin
+LEVERAGE = 35
+POSITION_SIZE_PERCENT = 1.6  # % of wallet balance to trade per coin
 TIMEFRAME = '3m'
 PROFIT_TARGET_PERCENT = 0.07  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
@@ -35,7 +35,7 @@ N_STEPS = 60  # For LSTM input sequence length
 #TRADING_PAIRS = ["XRP/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT"]
 TRADING_PAIRS = ["USUAL/USDT", "MOVE/USDT", "VELODROME/USDT", "TROY/USDT",
                      "SCR/USDT","ENA/USDT","XRP/USDT", 
-                     "DOGE/USDT", "ADA/USDT","MOCA/USDT"]
+                     "DOGE/USDT", "ADA/USDT"]
 # Fetch wallet balance
 def fetch_wallet_balance():
     try:
@@ -207,7 +207,7 @@ def should_trade(symbol, model, scaler, data, balance):
         # Remove the proximity condition for buy and sell
         # Buy Condition
         if (
-            predicted_price > current_price * 1.02
+            predicted_price > current_price * 1.002
             and (data['MA_10'].iloc[-1] > data['MA_30'].iloc[-1])
             and (30 < data['RSI'].iloc[-1] < 50)
         ):
@@ -215,8 +215,8 @@ def should_trade(symbol, model, scaler, data, balance):
 
         # Sell Condition
         elif (
-            predicted_price < current_price * 0.98
-            and data['RSI'].iloc[-1] > 65
+            predicted_price < current_price * 0.99
+            and data['RSI'].iloc[-1] > 63
             and data['MA_10'].iloc[-1] < data['MA_30'].iloc[-1]
         ):
             return 'sell', position_size
@@ -243,11 +243,11 @@ def monitor_positions():
                 logging.info(f"Monitoring {symbol}: Unrealized PnL={unrealized_profit}, Notional Value={notional_value}")
 
                 # Close position if profit target is achieved or ROI is below -15%
-                if unrealized_profit >= notional_value * fee_adjusted_profit or unrealized_profit <= -notional_value * 0.12:
+                if unrealized_profit >= notional_value * fee_adjusted_profit or unrealized_profit <= -notional_value * 0.2:
                     if unrealized_profit >= notional_value * fee_adjusted_profit:
                         logging.info(f"Profit target hit for {symbol}. Closing position.")
-                    elif unrealized_profit <= -notional_value * 0.12:
-                        logging.info(f"ROI below -15% for {symbol}. Closing position.")
+                    elif unrealized_profit <= -notional_value * 0.2:
+                        logging.info(f"ROI below -20% for {symbol}. Closing position.")
 
                     side = 'sell' if position['side'] == 'long' else 'buy'
                     size = abs(float(position['contracts']))
