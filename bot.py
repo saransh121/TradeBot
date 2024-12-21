@@ -205,11 +205,23 @@ def should_trade(symbol, model, scaler, data, balance):
         logging.info(f"Trade conditions for {symbol} - Predicted: {predicted_price}, Current: {current_price}, MA_10: {data['MA_10'].iloc[-1]}, MA_30: {data['MA_30'].iloc[-1]}, RSI: {data['RSI'].iloc[-1]}")
 
         # Buy Condition
-        if predicted_price > current_price * 1.01 and (data['MA_10'].iloc[-1] > data['MA_30'].iloc[-1]) and (30 < data['RSI'].iloc[-1] < 50):
+        if (
+            predicted_price > current_price * 1.01  # Predicted price is 1% higher
+            and (data['MA_10'].iloc[-1] > data['MA_30'].iloc[-1])  # Short-term MA above long-term MA
+            and (30 < data['RSI'].iloc[-1] < 50)  # RSI in a neutral to slightly oversold range
+            and (current_price - data['MA_10'].iloc[-1]) > -0.005 * current_price  # Price close to MA_10 or above
+        ):
             return 'buy', position_size
-        # Sell Condition (relaxed thresholds)
-        elif predicted_price < current_price * 0.99 and data['RSI'].iloc[-1] > 65:
+
+        # Sell Condition
+        elif (
+            predicted_price < current_price * 0.99  # Predicted price is 1% lower
+            and data['RSI'].iloc[-1] > 65  # RSI indicates overbought conditions
+            and data['MA_10'].iloc[-1] < data['MA_30'].iloc[-1]  # Short-term MA below long-term MA
+            and (current_price - data['MA_10'].iloc[-1]) > 0.005 * current_price  # Price above MA_10 significantly
+        ):
             return 'sell', position_size
+
         return None, 0
     except Exception as e:
         logging.error(f"Error determining trade signal for {symbol}: {e}")
