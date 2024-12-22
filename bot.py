@@ -27,7 +27,7 @@ logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(as
 
 # Parameters
 LEVERAGE = 35
-POSITION_SIZE_PERCENT = 2  # % of wallet balance to trade per coin
+POSITION_SIZE_PERCENT = 3  # % of wallet balance to trade per coin
 TIMEFRAME = '3m'
 PROFIT_TARGET_PERCENT = 0.08  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
@@ -370,7 +370,6 @@ def trade():
 def monitor_thread():
     while True:
         try:
-            logging.info(f"monitoring position")
             monitor_positions()
             time.sleep(3)  # Check every 5 seconds
         except Exception as e:
