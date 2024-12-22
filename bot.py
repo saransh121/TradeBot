@@ -5,6 +5,7 @@ import numpy as np
 import logging
 import joblib
 import os
+import threading
 from dotenv import load_dotenv
 from tensorflow.keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
@@ -26,9 +27,9 @@ logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(as
 
 # Parameters
 LEVERAGE = 35
-POSITION_SIZE_PERCENT = 1.6  # % of wallet balance to trade per coin
+POSITION_SIZE_PERCENT = 2  # % of wallet balance to trade per coin
 TIMEFRAME = '3m'
-PROFIT_TARGET_PERCENT = 0.07  # 10% profit target
+PROFIT_TARGET_PERCENT = 0.08  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
 # Trading Pairs
@@ -65,6 +66,8 @@ def add_indicators(data):
         data['MA_30'] = data['close'].rolling(window=30).mean()
         data['RSI'] = calculate_rsi(data['close'])
         data['ATR'] = calculate_atr(data)
+        data['EMA_7'] = data['close'].ewm(span=7, adjust=False).mean()
+        data['EMA_25'] = data['close'].ewm(span=25, adjust=False).mean()
         data = calculate_macd(data)
         return data.dropna()
     except Exception as e:
@@ -96,6 +99,45 @@ def calculate_macd(data, short_window=12, long_window=26, signal_window=9):
     data['MACD'] = data['EMA_short'] - data['EMA_long']
     data['Signal'] = data['MACD'].ewm(span=signal_window, adjust=False).mean()
     return data
+
+def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25'):
+    """
+    Detects crossover signals between two EMAs.
+
+    :param data: Pandas DataFrame containing EMA columns
+    :param short_ema_col: Column name for the short EMA (default: 'EMA_7')
+    :param long_ema_col: Column name for the long EMA (default: 'EMA_25')
+    :return: 'buy' if a bullish crossover is detected,
+             'sell' if a bearish crossover is detected,
+             None otherwise.
+    """
+    if len(data) < 2:
+        return None  # Not enough data to detect a crossover
+
+    # Check for missing values in EMA columns
+    if data[short_ema_col].isnull().any() or data[long_ema_col].isnull().any():
+        logging.warning(f"Missing EMA values in columns {short_ema_col} or {long_ema_col}. Skipping crossover detection.")
+        return None
+
+    # Previous and current EMA values
+    short_ema_prev = data[short_ema_col].iloc[-2]
+    long_ema_prev = data[long_ema_col].iloc[-2]
+    short_ema_curr = data[short_ema_col].iloc[-1]
+    long_ema_curr = data[long_ema_col].iloc[-1]
+    logging.info(f"Short EMA Prev: {short_ema_prev}, Curr: {short_ema_curr} | Long EMA Prev: {long_ema_prev}, Curr: {long_ema_curr}")
+    logging.info(f"Crossover detected: {'buy' if short_ema_prev < long_ema_prev and short_ema_curr > long_ema_curr else 'sell' if short_ema_prev > long_ema_prev and short_ema_curr < long_ema_curr else None}")
+
+    # Detect crossover
+    # Bullish crossover: short EMA crosses above long EMA
+    if short_ema_prev < long_ema_prev and short_ema_curr > long_ema_curr:
+        return 'buy'
+
+    # Bearish crossover: short EMA crosses below long EMA
+    elif short_ema_prev > long_ema_prev and short_ema_curr < long_ema_curr:
+        return 'sell'
+
+    return None
+
 
 
 # Prepare LSTM Input Data
@@ -214,18 +256,22 @@ def should_trade(symbol, model, scaler, data, balance):
         position_size = (POSITION_SIZE_PERCENT * balance) / current_price
         position_size = validate_position_size(symbol, position_size, current_price)
         atr = data['ATR'].iloc[-1]
-        buy_threshold = 1.005 + (atr / current_price * 0.05)  # Adjust by 10% of ATR
-        sell_threshold = 0.995 - (atr / current_price * 0.05)
+        buy_threshold = 1.002 + (atr / current_price * 0.05)  # Adjust by 10% of ATR
+        sell_threshold = 0.998 - (atr / current_price * 0.05)
+
+        crossover_signal = detect_crossover(data)
 
         logging.info(f"Trade conditions for {symbol} - Predicted: {predicted_price}, Current: {current_price}, MA_10: {data['MA_10'].iloc[-1]}, MA_30: {data['MA_30'].iloc[-1]}, RSI: {data['RSI'].iloc[-1]} , MACD : {data['MACD'].iloc[-1]}, Signal {data['Signal'].iloc[-1]}")
         logging.info(f"buy threshold {buy_threshold} - sell threshold {sell_threshold}")
+        logging.info(f"cross over signal {crossover_signal}")
         # Remove the proximity condition for buy and sell
         # Buy Condition
         if (
             (predicted_price > (current_price * buy_threshold))
-            and (data['MA_10'].iloc[-1] > data['MA_30'].iloc[-1])
-            and (30 < data['RSI'].iloc[-1] < 50)
-            and (data['MACD'].iloc[-1] > data['Signal'].iloc[-1]) 
+            and (crossover_signal == 'buy' )
+                #  or ((data['MA_10'].iloc[-1] > data['MA_30'].iloc[-1]) 
+                #      and (data['MACD'].iloc[-1] > data['Signal'].iloc[-1]) ))
+            # and (30 < data['RSI'].iloc[-1] < 60) 
             and (data['MACD'].iloc[-1] > 0)
         ):
             return 'buy', position_size
@@ -233,9 +279,10 @@ def should_trade(symbol, model, scaler, data, balance):
         # Sell Condition
         elif (
             (predicted_price < (current_price * sell_threshold))
-            and (data['RSI'].iloc[-1] > 63)
-            and (data['MA_10'].iloc[-1] < data['MA_30'].iloc[-1])
-            and (data['MACD'].iloc[-1] < data['Signal'].iloc[-1])  # Bearish MACD crossover
+            and (crossover_signal == 'sell' )
+                #  or ((data['MA_10'].iloc[-1] < data['MA_30'].iloc[-1]) 
+                #      and (data['MACD'].iloc[-1] < data['Signal'].iloc[-1])))
+            # and (data['RSI'].iloc[-1] > 65)
             and (data['MACD'].iloc[-1] < 0)
         ):
             return 'sell', position_size
@@ -265,8 +312,8 @@ def monitor_positions():
                 if unrealized_profit >= notional_value * fee_adjusted_profit or unrealized_profit <= -notional_value * 0.2:
                     if unrealized_profit >= notional_value * fee_adjusted_profit:
                         logging.info(f"Profit target hit for {symbol}. Closing position.")
-                    elif unrealized_profit <= -notional_value * 0.2:
-                        logging.info(f"ROI below -20% for {symbol}. Closing position.")
+                    elif unrealized_profit <= -notional_value * 0.15:
+                        logging.info(f"ROI below -15% for {symbol}. Closing position.")
 
                     side = 'sell' if position['side'] == 'long' else 'buy'
                     size = abs(float(position['contracts']))
@@ -312,13 +359,26 @@ def trade():
                             logging.warning(f"No LSTM model or scaler found for {symbol}")
 
                 # Monitor positions after trading
-                monitor_positions()
+                # monitor_positions()
             else:
                 logging.info("Insufficient balance. Waiting for funds.")
             time.sleep(20)  # Adjust as needed
         except Exception as e:
             logging.error(f"Error in main loop: {e}")
             time.sleep(10)
+
+def monitor_thread():
+    while True:
+        try:
+            logging.info(f"monitoring position")
+            monitor_positions()
+            time.sleep(3)  # Check every 5 seconds
+        except Exception as e:
+            logging.error(f"Error in monitor thread: {e}")
+            time.sleep(10)
+
+threading.Thread(target=monitor_thread, daemon=True).start()
+
 
 if __name__ == "__main__":
     trade()
