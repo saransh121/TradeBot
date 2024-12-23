@@ -29,7 +29,7 @@ logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(as
 LEVERAGE = 35
 POSITION_SIZE_PERCENT = 3  # % of wallet balance to trade per coin
 TIMEFRAME = '1m'
-PROFIT_TARGET_PERCENT = 0.07  # 10% profit target
+PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
 # Trading Pairs
@@ -270,7 +270,7 @@ def should_trade(symbol, model, scaler, data, balance):
              (predicted_price > (current_price * buy_threshold))
               and (crossover_signal == 'buy' )
                 #  or ((data['MA_10'].iloc[-1] > data['MA_30'].iloc[-1]) 
-                # and (data['MACD'].iloc[-1] > data['Signal'].iloc[-1]) 
+                #  and (data['MACD'].iloc[-1] > data['Signal'].iloc[-1]) 
             # and (30 < data['RSI'].iloc[-1] < 60) 
                 and (data['MACD'].iloc[-1] > 0)
         ):
@@ -371,7 +371,7 @@ def monitor_thread():
     while True:
         try:
             monitor_positions()
-            time.sleep(3)  # Check every 5 seconds
+            time.sleep(2)  # Check every 5 seconds
         except Exception as e:
             logging.error(f"Error in monitor thread: {e}")
             time.sleep(10)
