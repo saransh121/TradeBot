@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(as
 # Parameters
 LEVERAGE = 35
 POSITION_SIZE_PERCENT = 3  # % of wallet balance to trade per coin
-TIMEFRAME = '3m'
+TIMEFRAME = '1m'
 PROFIT_TARGET_PERCENT = 0.08  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
