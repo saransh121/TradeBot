@@ -29,7 +29,7 @@ logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(as
 LEVERAGE = 35
 POSITION_SIZE_PERCENT = 3  # % of wallet balance to trade per coin
 TIMEFRAME = '1m'
-PROFIT_TARGET_PERCENT = 0.08  # 10% profit target
+PROFIT_TARGET_PERCENT = 0.05  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
 # Trading Pairs
@@ -310,10 +310,10 @@ def monitor_positions():
                 logging.info(f"Monitoring {symbol}: Unrealized PnL={unrealized_profit}, Notional Value={notional_value}")
 
                 # Close position if profit target is achieved or ROI is below -15%
-                if unrealized_profit >= notional_value * fee_adjusted_profit or unrealized_profit <= -notional_value * 0.2:
+                if unrealized_profit >= notional_value * fee_adjusted_profit or unrealized_profit <= -notional_value * 0.1:
                     if unrealized_profit >= notional_value * fee_adjusted_profit:
                         logging.info(f"Profit target hit for {symbol}. Closing position.")
-                    elif unrealized_profit <= -notional_value * 0.15:
+                    elif unrealized_profit <= -notional_value * 0.1:
                         logging.info(f"ROI below -15% for {symbol}. Closing position.")
 
                     side = 'sell' if position['side'] == 'long' else 'buy'
