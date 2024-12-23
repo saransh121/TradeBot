@@ -271,7 +271,7 @@ def should_trade(symbol, model, scaler, data, balance):
             # (predicted_price > (current_price * buy_threshold))
              (crossover_signal == 'buy' )
                 #  or ((data['MA_10'].iloc[-1] > data['MA_30'].iloc[-1]) 
-                and (data['MACD'].iloc[-1] > data['Signal'].iloc[-1]) 
+                # and (data['MACD'].iloc[-1] > data['Signal'].iloc[-1]) 
             # and (30 < data['RSI'].iloc[-1] < 60) 
                 and (data['MACD'].iloc[-1] > 0)
         ):
@@ -282,7 +282,7 @@ def should_trade(symbol, model, scaler, data, balance):
             # (predicted_price < (current_price * sell_threshold))
              (crossover_signal == 'sell' )
                 #  or ((data['MA_10'].iloc[-1] < data['MA_30'].iloc[-1]) 
-                and (data['MACD'].iloc[-1] < data['Signal'].iloc[-1])
+                # and (data['MACD'].iloc[-1] < data['Signal'].iloc[-1])
             # and (data['RSI'].iloc[-1] > 65)
                 and (data['MACD'].iloc[-1] < 0)
         ):
