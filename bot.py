@@ -267,8 +267,8 @@ def should_trade(symbol, model, scaler, data, balance):
         # Remove the proximity condition for buy and sell
         # Buy Condition
         if (
-            (predicted_price > (current_price * buy_threshold))
-            and (crossover_signal == 'buy' )
+            # (predicted_price > (current_price * buy_threshold))
+             (crossover_signal == 'buy' )
                 #  or ((data['MA_10'].iloc[-1] > data['MA_30'].iloc[-1]) 
                 #      and (data['MACD'].iloc[-1] > data['Signal'].iloc[-1]) ))
             # and (30 < data['RSI'].iloc[-1] < 60) 
@@ -278,8 +278,8 @@ def should_trade(symbol, model, scaler, data, balance):
 
         # Sell Condition
         elif (
-            (predicted_price < (current_price * sell_threshold))
-            and (crossover_signal == 'sell' )
+            # (predicted_price < (current_price * sell_threshold))
+             (crossover_signal == 'sell' )
                 #  or ((data['MA_10'].iloc[-1] < data['MA_30'].iloc[-1]) 
                 #      and (data['MACD'].iloc[-1] < data['Signal'].iloc[-1])))
             # and (data['RSI'].iloc[-1] > 65)
