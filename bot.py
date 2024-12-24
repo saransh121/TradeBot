@@ -373,7 +373,7 @@ def monitor_thread():
     while True:
         try:
             monitor_positions()
-            time.sleep(2)  # Check every 5 seconds
+            time.sleep(3)  # Check every 5 seconds
         except Exception as e:
             logging.error(f"Error in monitor thread: {e}")
             time.sleep(10)
