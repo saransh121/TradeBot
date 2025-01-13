@@ -28,14 +28,13 @@ logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(as
 # Parameters
 LEVERAGE = 35
 POSITION_SIZE_PERCENT = 3  # % of wallet balance to trade per coin
-TIMEFRAME = '1m'
-PROFIT_TARGET_PERCENT = 0.03  # 10% profit target
+TIMEFRAME = '3m'
+PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
 # Trading Pairs
 #TRADING_PAIRS = ["XRP/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT"]
-TRADING_PAIRS = ["USUAL/USDT", "MOVE/USDT", "VELODROME/USDT", "TROY/USDT",
-                     "SCR/USDT","ENA/USDT","XRP/USDT", 
+TRADING_PAIRS = ["XRP/USDT", 
                      "DOGE/USDT", "ADA/USDT"]
 # Fetch wallet balance
 def fetch_wallet_balance():
@@ -247,8 +246,7 @@ def should_trade(symbol, model, scaler, data, balance):
         if lstm_input is None:
             return None, 0
 
-        predicted_price = 1
-        #model.predict(lstm_input)[0][0]
+        predicted_price = model.predict(lstm_input)[0][0]
         dummy_row = np.zeros((1, 9)) 
         dummy_row[0, 3] = predicted_price
         predicted_price = scaler.inverse_transform(dummy_row)[0][3]
@@ -268,23 +266,23 @@ def should_trade(symbol, model, scaler, data, balance):
         # Remove the proximity condition for buy and sell
         # Buy Condition
         if (
-            # (predicted_price > (current_price * buy_threshold))
-               (crossover_signal == 'buy' )
+             (predicted_price > (current_price * buy_threshold))
+              and (crossover_signal == 'buy' )
                 #  or ((data['MA_10'].iloc[-1] > data['MA_30'].iloc[-1]) 
                 #  and (data['MACD'].iloc[-1] > data['Signal'].iloc[-1]) 
                 #and (30 < data['RSI'].iloc[-1] < 50) 
-                #and (data['MACD'].iloc[-1] > 0)
+                and (data['MACD'].iloc[-1] > 0)
         ):
             return 'buy', position_size
 
         # Sell Condition
         elif (
-           # (predicted_price < (current_price * sell_threshold))
-                (crossover_signal == 'sell' )
+            (predicted_price < (current_price * sell_threshold))
+                # (crossover_signal == 'sell' )
                 #  or ((data['MA_10'].iloc[-1] < data['MA_30'].iloc[-1]) 
                 # and (data['MACD'].iloc[-1] < data['Signal'].iloc[-1])
                 #and (data['RSI'].iloc[-1] > 65)
-                # and (data['MACD'].iloc[-1] < 0)
+                 and (data['MACD'].iloc[-1] < 0)
         ):
             return 'sell', position_size
 
