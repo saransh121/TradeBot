@@ -137,17 +137,21 @@ def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_e
     trend_curr = data[trend_ema_col].iloc[-1]
 
     # Bearish crossover: EMA 7 crosses below EMA 25, with relaxed trend confirmation
-    if (short_prev >= long_prev and short_curr < long_curr and (short_curr - short_prev) < 0 and
-        (short_curr < trend_curr or long_curr < trend_curr)):
-        logging.info("Bearish crossover detected with relaxed trend confirmation. Signal: SELL")
-        return 'sell'
+    if short_prev >= long_prev and short_curr < long_curr:
+        if short_curr < trend_curr:
+            logging.info("Bearish crossover detected with trend confirmation. Signal: SELL")
+            return 'sell'
+        else:
+            logging.info("Bearish crossover detected without trend confirmation.")
 
-    # Bullish crossover: EMA 7 crosses above EMA 25, with relaxed trend confirmation
-    elif (short_prev <= long_prev and short_curr > long_curr and (short_curr - short_prev) > 0 and
-          (short_curr > trend_curr or long_curr > trend_curr)):
-        logging.info("Bullish crossover detected with relaxed trend confirmation. Signal: BUY")
-        return 'buy'
-
+    # Bullish crossover: Short EMA crosses above Long EMA
+    elif short_prev <= long_prev and short_curr > long_curr:
+        if short_curr > trend_curr:
+            logging.info("Bullish crossover detected with trend confirmation. Signal: BUY")
+            return 'buy'
+        else:
+            logging.info("Bullish crossover detected without trend confirmation.")
+            
     return None
 
 
@@ -269,8 +273,8 @@ def should_trade(symbol, model, scaler, data, balance):
         position_size = (POSITION_SIZE_PERCENT * balance) / current_price
         position_size = validate_position_size(symbol, position_size, current_price)
         atr = data['ATR'].iloc[-1]
-        buy_threshold = 1.001 + (atr / current_price * 0.05)  # Adjust by 10% of ATR
-        sell_threshold = 0.999 - (atr / current_price * 0.05)
+        buy_threshold = 1.002 + (atr / current_price * 0.05)  # Adjust by 10% of ATR
+        sell_threshold = 0.998 - (atr / current_price * 0.05)
 
         crossover_signal = detect_crossover(data)
 
@@ -376,7 +380,7 @@ def trade():
                 # monitor_positions()
             else:
                 logging.info("Insufficient balance. Waiting for funds.")
-            time.sleep(15)  # Adjust as needed
+            time.sleep(20)  # Adjust as needed
         except Exception as e:
             logging.error(f"Error in main loop: {e}")
             time.sleep(10)
@@ -385,7 +389,7 @@ def monitor_thread():
     while True:
         try:
             monitor_positions()
-            time.sleep(5)  # Check every 5 seconds
+            time.sleep(40)  # Check every 5 seconds
         except Exception as e:
             logging.error(f"Error in monitor thread: {e}")
             time.sleep(10)
