@@ -376,7 +376,7 @@ def trade():
                 # monitor_positions()
             else:
                 logging.info("Insufficient balance. Waiting for funds.")
-            time.sleep(20)  # Adjust as needed
+            time.sleep(30)  # Adjust as needed
         except Exception as e:
             logging.error(f"Error in main loop: {e}")
             time.sleep(10)
@@ -385,7 +385,7 @@ def monitor_thread():
     while True:
         try:
             monitor_positions()
-            time.sleep(40)  # Check every 5 seconds
+            time.sleep(5)  # Check every 5 seconds
         except Exception as e:
             logging.error(f"Error in monitor thread: {e}")
             time.sleep(10)
