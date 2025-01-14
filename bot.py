@@ -127,13 +127,15 @@ def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25'):
     logging.info(f"Crossover detected: {'buy' if short_ema_prev < long_ema_prev and short_ema_curr > long_ema_curr else 'sell' if short_ema_prev > long_ema_prev and short_ema_curr < long_ema_curr else None}")
 
     # Detect crossover
-    # Bullish crossover: short EMA crosses above long EMA
-    if short_ema_prev < long_ema_prev and short_ema_curr > long_ema_curr:
+    if short_ema_prev >= long_ema_prev and short_ema_curr < long_ema_curr and (short_ema_curr - short_ema_prev) < 0:
+        logging.info("Bearish crossover detected. Signal: SELL")
+        return 'sell'
+
+    # Bullish Crossover: EMA_7 is moving up and crosses above EMA_25
+    elif short_ema_prev <= long_ema_prev and short_ema_curr > long_ema_curr and (short_ema_curr - short_ema_prev) > 0:
+        logging.info("Bullish crossover detected. Signal: BUY")
         return 'buy'
 
-    # Bearish crossover: short EMA crosses below long EMA
-    elif short_ema_prev > long_ema_prev and short_ema_curr < long_ema_curr:
-        return 'sell'
 
     return None
 
