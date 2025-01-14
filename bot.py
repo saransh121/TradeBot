@@ -33,9 +33,9 @@ PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
 # Trading Pairs
-#TRADING_PAIRS = ["XRP/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT"]
-TRADING_PAIRS = ["XRP/USDT", 
-                     "DOGE/USDT", "ADA/USDT"]
+TRADING_PAIRS = ["XRP/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT"]
+#TRADING_PAIRS = ["XRP/USDT", 
+#                     "DOGE/USDT", "ADA/USDT"]
 # Fetch wallet balance
 def fetch_wallet_balance():
     try:
