@@ -264,7 +264,8 @@ def should_trade(symbol, model, scaler, data, balance):
         if lstm_input is None:
             return None, 0
 
-        predicted_price = model.predict(lstm_input)[0][0]
+        predicted_price = 1
+        #model.predict(lstm_input)[0][0]
         dummy_row = np.zeros((1, 17)) 
         dummy_row[0, 3] = predicted_price
         predicted_price = scaler.inverse_transform(dummy_row)[0][3]
@@ -285,9 +286,9 @@ def should_trade(symbol, model, scaler, data, balance):
         logging.info(f"cross over signal {crossover_signal}")
         # Remove the proximity condition for buy and sell
         # Buy Condition
-        if (
-             ((predicted_price > (current_price * buy_threshold))
-              and (crossover_signal == 'buy' ))
+        if ((crossover_signal == 'buy' )
+            #  ((predicted_price > (current_price * buy_threshold))
+            #   and (crossover_signal == 'buy' ))
                 
                 #  or ((data['MA_10'].iloc[-1] > data['MA_30'].iloc[-1]) 
                 #  and (data['MACD'].iloc[-1] > data['Signal'].iloc[-1]) 
@@ -297,9 +298,9 @@ def should_trade(symbol, model, scaler, data, balance):
             return 'buy', position_size
 
         # Sell Condition
-        elif (
-            ((predicted_price < (current_price * sell_threshold))
-                and (crossover_signal == 'sell' ))
+        elif ((crossover_signal == 'sell' )
+            # ((predicted_price < (current_price * sell_threshold))
+            #     and (crossover_signal == 'sell' ))
                 #  or ((data['MA_10'].iloc[-1] < data['MA_30'].iloc[-1]) 
                 # and (data['MACD'].iloc[-1] < data['Signal'].iloc[-1])
                 #and (data['RSI'].iloc[-1] > 65)
@@ -391,7 +392,7 @@ def monitor_thread():
     while True:
         try:
             monitor_positions()
-            time.sleep(40)  # Check every 5 seconds
+            time.sleep(5)  # Check every 5 seconds
         except Exception as e:
             logging.error(f"Error in monitor thread: {e}")
             time.sleep(10)
