@@ -67,11 +67,23 @@ def add_indicators(data):
         data['ATR'] = calculate_atr(data)
         data['EMA_7'] = data['close'].ewm(span=7, adjust=False).mean()
         data['EMA_25'] = data['close'].ewm(span=25, adjust=False).mean()
+        data['EMA_99'] = data['close'].ewm(span=99, adjust=False).mean()
         data = calculate_macd(data)
+        # data['EMA_12'] = data['close'].ewm(span=12, adjust=False).mean()
+        # data['EMA_26'] = data['close'].ewm(span=26, adjust=False).mean()
+        # data['MACD'] = data['EMA_12'] - data['EMA_26']
+        data['Upper_Band'], data['Lower_Band'] = calculate_bollinger_bands(data['close'])
         return data.dropna()
     except Exception as e:
         logging.error(f"Error adding indicators: {e}")
         return None
+
+def calculate_bollinger_bands(series, window=20):
+    sma = series.rolling(window=window).mean()
+    std = series.rolling(window=window).std()
+    upper_band = sma + (2 * std)
+    lower_band = sma - (2 * std)
+    return upper_band, lower_band
 
 # RSI Calculation
 def calculate_rsi(series, period=14):
@@ -93,58 +105,58 @@ def calculate_macd(data, short_window=12, long_window=26, signal_window=9):
     """
     Calculate MACD and Signal line.
     """
-    data['EMA_short'] = data['close'].ewm(span=short_window, adjust=False).mean()
-    data['EMA_long'] = data['close'].ewm(span=long_window, adjust=False).mean()
-    data['MACD'] = data['EMA_short'] - data['EMA_long']
+    data['EMA_12'] = data['close'].ewm(span=short_window, adjust=False).mean()
+    data['EMA_26'] = data['close'].ewm(span=long_window, adjust=False).mean()
+    data['MACD'] = data['EMA_12'] - data['EMA_26']
     data['Signal'] = data['MACD'].ewm(span=signal_window, adjust=False).mean()
     return data
 
-def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25'):
+def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_ema_col='EMA_99'):
     """
-    Detects crossover signals between two EMAs.
-
-    :param data: Pandas DataFrame containing EMA columns
-    :param short_ema_col: Column name for the short EMA (default: 'EMA_7')
-    :param long_ema_col: Column name for the long EMA (default: 'EMA_25')
-    :return: 'buy' if a bullish crossover is detected,
-             'sell' if a bearish crossover is detected,
-             None otherwise.
+    Detects EMA crossover signals with relaxed trend confirmation.
+    
+    :param data: Pandas DataFrame containing EMA columns.
+    :param short_ema_col: Column name for the short EMA (default: 'EMA_7').
+    :param long_ema_col: Column name for the long EMA (default: 'EMA_25').
+    :param trend_ema_col: Column name for the trend EMA (default: 'EMA_99').
+    :return: 'buy' if bullish crossover detected, 'sell' if bearish crossover detected, None otherwise.
     """
     if len(data) < 2:
-        return None  # Not enough data to detect a crossover
+        return None  # Not enough data
 
-    # Check for missing values in EMA columns
-    if data[short_ema_col].isnull().any() or data[long_ema_col].isnull().any():
-        logging.warning(f"Missing EMA values in columns {short_ema_col} or {long_ema_col}. Skipping crossover detection.")
+    # Check for missing EMA values
+    if data[short_ema_col].isnull().any() or data[long_ema_col].isnull().any() or data[trend_ema_col].isnull().any():
+        logging.warning(f"Missing EMA values in {short_ema_col}, {long_ema_col}, or {trend_ema_col}.")
         return None
 
-    # Previous and current EMA values
-    short_ema_prev = data[short_ema_col].iloc[-2]
-    long_ema_prev = data[long_ema_col].iloc[-2]
-    short_ema_curr = data[short_ema_col].iloc[-1]
-    long_ema_curr = data[long_ema_col].iloc[-1]
-    logging.info(f"Short EMA Prev: {short_ema_prev}, Curr: {short_ema_curr} | Long EMA Prev: {long_ema_prev}, Curr: {long_ema_curr}")
-    logging.info(f"Crossover detected: {'buy' if short_ema_prev < long_ema_prev and short_ema_curr > long_ema_curr else 'sell' if short_ema_prev > long_ema_prev and short_ema_curr < long_ema_curr else None}")
+    # Extract EMA values
+    short_prev = data[short_ema_col].iloc[-2]
+    long_prev = data[long_ema_col].iloc[-2]
+    short_curr = data[short_ema_col].iloc[-1]
+    long_curr = data[long_ema_col].iloc[-1]
+    trend_curr = data[trend_ema_col].iloc[-1]
 
-    # Detect crossover
-    if short_ema_prev >= long_ema_prev and short_ema_curr < long_ema_curr and (short_ema_curr - short_ema_prev) < 0:
-        logging.info("Bearish crossover detected. Signal: SELL")
+    # Bearish crossover: EMA 7 crosses below EMA 25, with relaxed trend confirmation
+    if (short_prev >= long_prev and short_curr < long_curr and (short_curr - short_prev) < 0 and
+        (short_curr < trend_curr or long_curr < trend_curr)):
+        logging.info("Bearish crossover detected with relaxed trend confirmation. Signal: SELL")
         return 'sell'
 
-    # Bullish Crossover: EMA_7 is moving up and crosses above EMA_25
-    elif short_ema_prev <= long_ema_prev and short_ema_curr > long_ema_curr and (short_ema_curr - short_ema_prev) > 0:
-        logging.info("Bullish crossover detected. Signal: BUY")
+    # Bullish crossover: EMA 7 crosses above EMA 25, with relaxed trend confirmation
+    elif (short_prev <= long_prev and short_curr > long_curr and (short_curr - short_prev) > 0 and
+          (short_curr > trend_curr or long_curr > trend_curr)):
+        logging.info("Bullish crossover detected with relaxed trend confirmation. Signal: BUY")
         return 'buy'
 
-
     return None
+
 
 
 
 # Prepare LSTM Input Data
 def prepare_lstm_input(data, scaler, n_steps=60):
     try:
-        features = ['open', 'high', 'low', 'close', 'volume', 'MA_10', 'MA_30', 'RSI', 'ATR']
+        features = ['open', 'high', 'low', 'close', 'volume', 'MA_10', 'MA_30', 'RSI', 'ATR','EMA_12','EMA_26','MACD','EMA_7','EMA_25','EMA_99','Upper_Band','Lower_Band']
         scaled_data = scaler.transform(data[features].tail(n_steps))
         return scaled_data.reshape(1, n_steps, len(features))
     except Exception as e:
@@ -249,7 +261,7 @@ def should_trade(symbol, model, scaler, data, balance):
             return None, 0
 
         predicted_price = model.predict(lstm_input)[0][0]
-        dummy_row = np.zeros((1, 9)) 
+        dummy_row = np.zeros((1, 17)) 
         dummy_row[0, 3] = predicted_price
         predicted_price = scaler.inverse_transform(dummy_row)[0][3]
         logging.info(f"LSTM Prediction for {symbol}: {predicted_price}, Current Price: {current_price}")
@@ -267,9 +279,9 @@ def should_trade(symbol, model, scaler, data, balance):
         logging.info(f"cross over signal {crossover_signal}")
         # Remove the proximity condition for buy and sell
         # Buy Condition
-        if ((crossover_signal == 'buy' )
-             # ((predicted_price > (current_price * buy_threshold))
-             #  or (crossover_signal == 'buy' ))
+        if (
+             ((predicted_price > (current_price * buy_threshold))
+              or (crossover_signal == 'buy' ))
                 
                 #  or ((data['MA_10'].iloc[-1] > data['MA_30'].iloc[-1]) 
                 #  and (data['MACD'].iloc[-1] > data['Signal'].iloc[-1]) 
@@ -279,9 +291,9 @@ def should_trade(symbol, model, scaler, data, balance):
             return 'buy', position_size
 
         # Sell Condition
-        elif ((crossover_signal == 'sell' )
-            # ((predicted_price < (current_price * sell_threshold))
-            #     or (crossover_signal == 'sell' ))
+        elif (
+            ((predicted_price < (current_price * sell_threshold))
+                or (crossover_signal == 'sell' ))
                 #  or ((data['MA_10'].iloc[-1] < data['MA_30'].iloc[-1]) 
                 # and (data['MACD'].iloc[-1] < data['Signal'].iloc[-1])
                 #and (data['RSI'].iloc[-1] > 65)
@@ -373,7 +385,7 @@ def monitor_thread():
     while True:
         try:
             monitor_positions()
-            time.sleep(10)  # Check every 5 seconds
+            time.sleep(40)  # Check every 5 seconds
         except Exception as e:
             logging.error(f"Error in monitor thread: {e}")
             time.sleep(10)
