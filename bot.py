@@ -151,7 +151,7 @@ def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_e
             return 'buy'
         else:
             logging.info("Bullish crossover detected without trend confirmation.")
-            
+
     return None
 
 
@@ -273,8 +273,10 @@ def should_trade(symbol, model, scaler, data, balance):
         position_size = (POSITION_SIZE_PERCENT * balance) / current_price
         position_size = validate_position_size(symbol, position_size, current_price)
         atr = data['ATR'].iloc[-1]
-        buy_threshold = 1.002 + (atr / current_price * 0.05)  # Adjust by 10% of ATR
-        sell_threshold = 0.998 - (atr / current_price * 0.05)
+        buy_threshold = 1
+        #1.002 + (atr / current_price * 0.05)  # Adjust by 10% of ATR
+        sell_threshold = 1
+        #0.998 - (atr / current_price * 0.05)
 
         crossover_signal = detect_crossover(data)
 
