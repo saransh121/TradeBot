@@ -113,44 +113,95 @@ def calculate_macd(data, short_window=12, long_window=26, signal_window=9):
 
 def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_ema_col='EMA_99'):
     """
-    Detects EMA crossover signals with relaxed trend confirmation.
+    Enhanced EMA crossover detection with support, trend, breakout, wick, and volume analysis.
     
-    :param data: Pandas DataFrame containing EMA columns.
-    :param short_ema_col: Column name for the short EMA (default: 'EMA_7').
-    :param long_ema_col: Column name for the long EMA (default: 'EMA_25').
-    :param trend_ema_col: Column name for the trend EMA (default: 'EMA_99').
-    :return: 'buy' if bullish crossover detected, 'sell' if bearish crossover detected, None otherwise.
+    :param data: DataFrame containing price, EMA, and volume columns.
+    :return: 'buy', 'sell', 'watch', or None.
     """
-    if len(data) < 2:
+    if len(data) < 4:
         return None  # Not enough data
 
-    # Check for missing EMA values
-    if data[short_ema_col].isnull().any() or data[long_ema_col].isnull().any() or data[trend_ema_col].isnull().any():
-        logging.warning(f"Missing EMA values in {short_ema_col}, {long_ema_col}, or {trend_ema_col}.")
-        return None
-
     # Extract EMA values
-    short_prev = data[short_ema_col].iloc[-2]
-    long_prev = data[long_ema_col].iloc[-2]
-    short_curr = data[short_ema_col].iloc[-1]
-    long_curr = data[long_ema_col].iloc[-1]
+    short_prev, short_curr = data[short_ema_col].iloc[-2], data[short_ema_col].iloc[-1]
+    long_prev, long_curr = data[long_ema_col].iloc[-2], data[long_ema_col].iloc[-1]
     trend_curr = data[trend_ema_col].iloc[-1]
 
-    # Bearish crossover: EMA 7 crosses below EMA 25, with relaxed trend confirmation
-    if short_prev >= long_prev and short_curr < long_curr:
-        if short_curr < trend_curr:
-            logging.info("Bearish crossover detected with trend confirmation. Signal: SELL")
-            return 'sell'
-        else:
-            logging.info("Bearish crossover detected without trend confirmation.")
+    # Current and previous candle data
+    open_curr, close_curr, low_curr, high_curr = data['open'].iloc[-1], data['close'].iloc[-1], data['low'].iloc[-1], data['high'].iloc[-1]
+    close_prev = data['close'].iloc[-2]
+    
+    # Volume data
+    volume_curr = data['volume'].iloc[-1]
+    avg_volume = data['volume'].iloc[-20:].mean()  # Average of last 20 periods
 
-    # Bullish crossover: Short EMA crosses above Long EMA
-    elif short_prev <= long_prev and short_curr > long_curr:
-        if short_curr > trend_curr:
-            logging.info("Bullish crossover detected with trend confirmation. Signal: BUY")
-            return 'buy'
-        else:
-            logging.info("Bullish crossover detected without trend confirmation.")
+    # EMA slopes
+    short_slope = short_curr - short_prev
+    long_slope = long_curr - long_prev
+
+    # Candle characteristics
+    is_red_candle = close_curr < open_curr
+    is_green_candle = close_curr > open_curr
+
+    # Support/Resistance threshold
+    support_threshold = 0.001 * close_curr  # 0.1% buffer
+
+    # EMA Compression threshold
+    ema_gap = abs(short_curr - long_curr)
+    compression_threshold = 0.0005 * close_curr  # 0.05% gap
+
+    # Wick sizes
+    upper_wick = high_curr - max(open_curr, close_curr)
+    lower_wick = min(open_curr, close_curr) - low_curr
+
+    # Volume conditions
+    is_high_volume = volume_curr > 1.1 * avg_volume  # 50% higher than average
+    is_low_volume = volume_curr < 0.9 * avg_volume   # 20% lower than average
+
+    # --- New Logic with Volume Analysis ---
+
+    # 1. High Volume Breakout Above EMA → Strong Buy
+    if close_prev < short_prev and close_curr > short_curr and close_curr > long_curr and is_high_volume:
+        logging.info("High volume breakout above EMA resistance. Strong BUY signal.")
+        return 'buy'
+
+    # 2. High Volume Breakdown Below EMA → Strong Sell
+    if close_prev > short_prev and close_curr < short_curr and close_curr < long_curr and is_high_volume:
+        logging.info("High volume breakdown below EMA support. Strong SELL signal.")
+        return 'sell'
+
+    # 3. Low Volume Breakout → Ignore Signal
+    if (close_prev < short_prev and close_curr > short_curr) and is_low_volume:
+        logging.info("Low volume breakout detected. Ignoring weak BUY signal.")
+        return None
+
+    # 4. EMA Compression (Squeeze) → Trend Reversal Alert
+    if ema_gap <= compression_threshold:
+        logging.info("EMA compression detected. Potential breakout or reversal ahead. Signal: WATCH")
+        return 'watch'  # New return statement added here
+
+    # 5. Long Lower Wick Near EMA + High Volume → Buy Signal
+    if lower_wick > upper_wick and abs(low_curr - short_curr) <= support_threshold and is_green_candle and is_high_volume:
+        logging.info("Long lower wick near EMA with high volume. Strong BUY signal.")
+        return 'buy'
+
+    # 6. Long Upper Wick Near EMA + High Volume → Sell Signal
+    if upper_wick > lower_wick and abs(high_curr - short_curr) <= support_threshold and is_red_candle and is_high_volume:
+        logging.info("Long upper wick near EMA with high volume. Strong SELL signal.")
+        return 'sell'
+
+    # --- Existing Crossover Logic ---
+
+    # Bearish crossover
+#    if short_prev >= long_prev and short_curr < long_curr:
+#       if short_curr < trend_curr and is_high_volume:
+ #           logging.info("Bearish crossover with high volume. Signal: SELL")
+  #         return 'sell'
+
+    # Bullish crossover
+ #   elif short_prev <= long_prev and short_curr > long_curr:
+  #      if short_curr > trend_curr and is_high_volume:
+  #          logging.info("Bullish crossover with high volume. Signal: BUY")
+   #         return 'buy'
 
     return None
 
@@ -285,8 +336,8 @@ def should_trade(symbol, model, scaler, data, balance):
         logging.info(f"cross over signal {crossover_signal}")
         # Remove the proximity condition for buy and sell
         # Buy Condition
-        if (
-              (predicted_price > (current_price * buy_threshold))
+        if ((crossover_signal == 'buy' )
+           #   (predicted_price > (current_price * buy_threshold))
             #   and (crossover_signal == 'buy' ))
                 
                 #  or ((data['MA_10'].iloc[-1] > data['MA_30'].iloc[-1]) 
@@ -297,8 +348,8 @@ def should_trade(symbol, model, scaler, data, balance):
             return 'buy', position_size
 
         # Sell Condition
-        elif (
-            (predicted_price < (current_price * sell_threshold))
+        elif ((crossover_signal == 'sell' )
+            #(predicted_price < (current_price * sell_threshold))
             #     and (crossover_signal == 'sell' ))
                 #  or ((data['MA_10'].iloc[-1] < data['MA_30'].iloc[-1]) 
                  and (data['MACD'].iloc[-1] < data['Signal'].iloc[-1])
