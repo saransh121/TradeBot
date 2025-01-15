@@ -264,8 +264,7 @@ def should_trade(symbol, model, scaler, data, balance):
         if lstm_input is None:
             return None, 0
 
-        predicted_price = 1
-        #model.predict(lstm_input)[0][0]
+        predicted_price = model.predict(lstm_input)[0][0]
         dummy_row = np.zeros((1, 17)) 
         dummy_row[0, 3] = predicted_price
         predicted_price = scaler.inverse_transform(dummy_row)[0][3]
@@ -274,10 +273,8 @@ def should_trade(symbol, model, scaler, data, balance):
         position_size = (POSITION_SIZE_PERCENT * balance) / current_price
         position_size = validate_position_size(symbol, position_size, current_price)
         atr = data['ATR'].iloc[-1]
-        buy_threshold = 1
-        #1.002 + (atr / current_price * 0.05)  # Adjust by 10% of ATR
-        sell_threshold = 1
-        #0.998 - (atr / current_price * 0.05)
+        buy_threshold = 1.002 + (atr / current_price * 0.005)  # Adjust by 10% of ATR
+        sell_threshold = 0.998 - (atr / current_price * 0.005)
 
         crossover_signal = detect_crossover(data)
 
@@ -286,25 +283,25 @@ def should_trade(symbol, model, scaler, data, balance):
         logging.info(f"cross over signal {crossover_signal}")
         # Remove the proximity condition for buy and sell
         # Buy Condition
-        if ((crossover_signal == 'buy' )
-            #  ((predicted_price > (current_price * buy_threshold))
+        if (
+              (predicted_price > (current_price * buy_threshold))
             #   and (crossover_signal == 'buy' ))
                 
                 #  or ((data['MA_10'].iloc[-1] > data['MA_30'].iloc[-1]) 
-                #  and (data['MACD'].iloc[-1] > data['Signal'].iloc[-1]) 
+                  and (data['MACD'].iloc[-1] > data['Signal'].iloc[-1]) 
                 #and (30 < data['RSI'].iloc[-1] < 50) 
-                #and (data['MACD'].iloc[-1] > 0)
+                and (data['MACD'].iloc[-1] > 0)
         ):
             return 'buy', position_size
 
         # Sell Condition
-        elif ((crossover_signal == 'sell' )
-            # ((predicted_price < (current_price * sell_threshold))
+        elif (
+            (predicted_price < (current_price * sell_threshold))
             #     and (crossover_signal == 'sell' ))
                 #  or ((data['MA_10'].iloc[-1] < data['MA_30'].iloc[-1]) 
-                # and (data['MACD'].iloc[-1] < data['Signal'].iloc[-1])
+                 and (data['MACD'].iloc[-1] < data['Signal'].iloc[-1])
                 #and (data['RSI'].iloc[-1] > 65)
-               #  and (data['MACD'].iloc[-1] < 0)
+                and (data['MACD'].iloc[-1] < 0)
         ):
             return 'sell', position_size
 
@@ -383,7 +380,7 @@ def trade():
                 # monitor_positions()
             else:
                 logging.info("Insufficient balance. Waiting for funds.")
-            time.sleep(20)  # Adjust as needed
+            time.sleep(25)  # Adjust as needed
         except Exception as e:
             logging.error(f"Error in main loop: {e}")
             time.sleep(10)
