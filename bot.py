@@ -321,7 +321,8 @@ def should_trade(symbol, model, scaler, data, balance):
         #model.predict(lstm_input)[0][0]
         dummy_row = np.zeros((1, 17)) 
         dummy_row[0, 3] = predicted_price
-        predicted_price = scaler.inverse_transform(dummy_row)[0][3]
+        predicted_price = 0
+        #scaler.inverse_transform(dummy_row)[0][3]
         logging.info(f"LSTM Prediction for {symbol}: {predicted_price}, Current Price: {current_price}")
 
         position_size = (POSITION_SIZE_PERCENT * balance) / current_price
