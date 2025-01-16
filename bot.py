@@ -183,11 +183,11 @@ def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_e
         return 'sell'
 
     # 3. Low Volume Breakout → Ignore Signal
-    if (close_prev < short_prev and close_curr > short_curr) and is_green_candle:
+    if (close_prev < short_prev and close_curr > short_curr) and is_high_volume and is_green_candle:
         logging.info("Green Candle after potential breakout")
         return 'buy'
     
-    if (close_prev < short_prev and close_curr > short_curr) and is_red_candle:
+    if (close_prev > short_prev and close_curr < short_curr)  and is_high_volume and is_red_candle:
         logging.info("Red Candle after potential breakdown")
         return 'sell'
 
