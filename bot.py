@@ -34,7 +34,7 @@ N_STEPS = 60  # For LSTM input sequence length
 
 # Trading Pairs
 TRADING_PAIRS = ["XRP/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT","ENA/USDT"
-                 ,"USUAL/USDT","FARTCOIN/USDT","HBAR/USDT"
+                 ,"USUAL/USDT","HBAR/USDT"
                  ,"XLM/USDT","PNUT/USDT"]
 #TRADING_PAIRS = ["XRP/USDT", 
 #                     "DOGE/USDT", "ADA/USDT"]
@@ -165,8 +165,8 @@ def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_e
     avg_body_size = abs(data['close'].iloc[-5:] - data['open'].iloc[-5:]).mean()
 
     # Volume conditions
-    is_high_volume = volume_curr > 1.2 * avg_volume  # 20% higher than average
-    is_low_volume = volume_curr < 0.8 * avg_volume   # 20% lower than average
+    is_high_volume = volume_curr > 1.1 * avg_volume  # 20% higher than average
+    is_low_volume = volume_curr < 0.9 * avg_volume   # 20% lower than average
 
     # --- Enhanced Logic with Buffer and Momentum Analysis ---
 
