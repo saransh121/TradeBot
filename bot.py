@@ -26,14 +26,16 @@ exchange = ccxt.binance({
 logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Parameters
-LEVERAGE = 35
+LEVERAGE = 40
 POSITION_SIZE_PERCENT = 3  # % of wallet balance to trade per coin
 TIMEFRAME = '3m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
 # Trading Pairs
-TRADING_PAIRS = ["XRP/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT","ENA/USDT","USUAL/USDT"]
+TRADING_PAIRS = ["XRP/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT","ENA/USDT"
+                 ,"USUAL/USDT","FARTCOIN/USDT","HBAR/USDT"
+                 ,"XLM/USDT","PNUT/USDT"]
 #TRADING_PAIRS = ["XRP/USDT", 
 #                     "DOGE/USDT", "ADA/USDT"]
 # Fetch wallet balance
@@ -170,13 +172,13 @@ def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_e
 
     # 1. High Volume Breakout Above EMA → Strong Buy (with Buffer and Momentum)
     if (close_prev < short_prev and close_curr > short_curr * 1.001 and close_curr > long_curr * 1.001 and
-            is_high_volume and body_size > avg_body_size):
+            is_high_volume ):
         logging.info("High volume breakout above EMA resistance with momentum. Strong BUY signal.")
         return 'buy'
 
     # 2. High Volume Breakdown Below EMA → Strong Sell (with Buffer and Momentum)
     if (close_prev > short_prev and close_curr < short_curr * 0.999 and close_curr < long_curr * 0.999 and
-            is_high_volume and body_size > avg_body_size):
+            is_high_volume ):
         logging.info("High volume breakdown below EMA support with momentum. Strong SELL signal.")
         return 'sell'
 
@@ -418,11 +420,11 @@ def trade():
                     if data is not None:
                         model_path = f"models_lstm/lstm_{symbol.replace('/', '_')}.h5"
                         scaler_path = f"models_lstm/scaler_{symbol.replace('/', '_')}.pkl"
-
-                        if os.path.exists(model_path) and os.path.exists(scaler_path):
+                        #os.path.exists(model_path) and os.path.exists(scaler_path)
+                        if data is not None:
                             model = load_model(model_path, compile=False)
                             scaler = joblib.load(scaler_path)
-                            action, size = should_trade(symbol, model, scaler, data, balance)
+                            action, size = should_trade(symbol, model, 0, data, balance)
                             if action == 'buy':
                                 place_order(symbol, 'buy', size)
                             elif action == 'sell':
