@@ -33,7 +33,7 @@ PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
 # Trading Pairs
-TRADING_PAIRS = ["XRP/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT","ENA/USDT","USUAL/USDT","AIXBT/USDT"]
+TRADING_PAIRS = ["XRP/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT","ENA/USDT","USUAL/USDT"]
 #TRADING_PAIRS = ["XRP/USDT", 
 #                     "DOGE/USDT", "ADA/USDT"]
 # Fetch wallet balance
@@ -111,9 +111,14 @@ def calculate_macd(data, short_window=12, long_window=26, signal_window=9):
     data['Signal'] = data['MACD'].ewm(span=signal_window, adjust=False).mean()
     return data
 
+import logging
+
+# Initialize logging
+logging.basicConfig(level=logging.INFO)
+
 def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_ema_col='EMA_99'):
     """
-    Enhanced EMA crossover detection with support, trend, breakout, wick, and volume analysis.
+    Optimized EMA crossover detection with support, trend, breakout, wick, and volume analysis.
     
     :param data: DataFrame containing price, EMA, and volume columns.
     :return: 'buy', 'sell', 'watch', or None.
@@ -129,7 +134,7 @@ def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_e
     # Current and previous candle data
     open_curr, close_curr, low_curr, high_curr = data['open'].iloc[-1], data['close'].iloc[-1], data['low'].iloc[-1], data['high'].iloc[-1]
     close_prev = data['close'].iloc[-2]
-    
+
     # Volume data
     volume_curr = data['volume'].iloc[-1]
     avg_volume = data['volume'].iloc[-20:].mean()  # Average of last 20 periods
@@ -153,20 +158,26 @@ def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_e
     upper_wick = high_curr - max(open_curr, close_curr)
     lower_wick = min(open_curr, close_curr) - low_curr
 
+    # Candle body size for momentum check
+    body_size = abs(close_curr - open_curr)
+    avg_body_size = abs(data['close'].iloc[-5:] - data['open'].iloc[-5:]).mean()
+
     # Volume conditions
-    is_high_volume = volume_curr > 1.1 * avg_volume  # 50% higher than average
-    is_low_volume = volume_curr < 0.9 * avg_volume   # 20% lower than average
+    is_high_volume = volume_curr > 1.2 * avg_volume  # 20% higher than average
+    is_low_volume = volume_curr < 0.8 * avg_volume   # 20% lower than average
 
-    # --- New Logic with Volume Analysis ---
+    # --- Enhanced Logic with Buffer and Momentum Analysis ---
 
-    # 1. High Volume Breakout Above EMA → Strong Buy
-    if close_prev < short_prev and close_curr > short_curr and close_curr > long_curr and is_high_volume:
-        logging.info("High volume breakout above EMA resistance. Strong BUY signal.")
+    # 1. High Volume Breakout Above EMA → Strong Buy (with Buffer and Momentum)
+    if (close_prev < short_prev and close_curr > short_curr * 1.001 and close_curr > long_curr * 1.001 and
+            is_high_volume and body_size > avg_body_size):
+        logging.info("High volume breakout above EMA resistance with momentum. Strong BUY signal.")
         return 'buy'
 
-    # 2. High Volume Breakdown Below EMA → Strong Sell
-    if close_prev > short_prev and close_curr < short_curr and close_curr < long_curr and is_high_volume:
-        logging.info("High volume breakdown below EMA support. Strong SELL signal.")
+    # 2. High Volume Breakdown Below EMA → Strong Sell (with Buffer and Momentum)
+    if (close_prev > short_prev and close_curr < short_curr * 0.999 and close_curr < long_curr * 0.999 and
+            is_high_volume and body_size > avg_body_size):
+        logging.info("High volume breakdown below EMA support with momentum. Strong SELL signal.")
         return 'sell'
 
     # 3. Low Volume Breakout → Ignore Signal
@@ -177,33 +188,22 @@ def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_e
     # 4. EMA Compression (Squeeze) → Trend Reversal Alert
     if ema_gap <= compression_threshold:
         logging.info("EMA compression detected. Potential breakout or reversal ahead. Signal: WATCH")
-        return 'watch'  # New return statement added here
+        return 'watch'
 
     # 5. Long Lower Wick Near EMA + High Volume → Buy Signal
-    if lower_wick > upper_wick and abs(low_curr - short_curr) <= support_threshold and is_green_candle and is_high_volume:
+    if (lower_wick > upper_wick and abs(low_curr - short_curr) <= support_threshold and
+            is_green_candle and is_high_volume):
         logging.info("Long lower wick near EMA with high volume. Strong BUY signal.")
         return 'buy'
 
     # 6. Long Upper Wick Near EMA + High Volume → Sell Signal
-    if upper_wick > lower_wick and abs(high_curr - short_curr) <= support_threshold and is_red_candle and is_high_volume:
+    if (upper_wick > lower_wick and abs(high_curr - short_curr) <= support_threshold and
+            is_red_candle and is_high_volume):
         logging.info("Long upper wick near EMA with high volume. Strong SELL signal.")
         return 'sell'
 
-    # --- Existing Crossover Logic ---
-
-    # Bearish crossover
-#    if short_prev >= long_prev and short_curr < long_curr:
-#       if short_curr < trend_curr and is_high_volume:
- #           logging.info("Bearish crossover with high volume. Signal: SELL")
-  #         return 'sell'
-
-    # Bullish crossover
- #   elif short_prev <= long_prev and short_curr > long_curr:
-  #      if short_curr > trend_curr and is_high_volume:
-  #          logging.info("Bullish crossover with high volume. Signal: BUY")
-   #         return 'buy'
-
     return None
+
 
 
 
