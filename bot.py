@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(as
 # Parameters
 LEVERAGE = 40
 POSITION_SIZE_PERCENT = 3  # % of wallet balance to trade per coin
-TIMEFRAME = '3m'
+TIMEFRAME = '1m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
@@ -185,7 +185,7 @@ def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_e
     # 3. Low Volume Breakout → Ignore Signal
     if (close_prev < short_prev and close_curr > short_curr) and is_low_volume:
         logging.info("Low volume breakout detected. Ignoring weak BUY signal.")
-        return None
+        return 'buy'
 
     # 4. EMA Compression (Squeeze) → Trend Reversal Alert
     if ema_gap <= compression_threshold:
