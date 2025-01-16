@@ -425,7 +425,7 @@ def trade():
                         #os.path.exists(model_path) and os.path.exists(scaler_path)
                         if data is not None:
                             model = None
-                            scaler = joblib.load(scaler_path)
+                            scaler = None
                             action, size = should_trade(symbol, model, 0, data, balance)
                             if action == 'buy':
                                 place_order(symbol, 'buy', size)
