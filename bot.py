@@ -185,11 +185,11 @@ def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_e
     # 3. Low Volume Breakout → Ignore Signal
     if (close_prev < short_prev and close_curr > short_curr) and is_high_volume and is_green_candle:
         logging.info("Green Candle after potential breakout")
-        return 'buy'
+        return 'watch'
     
     if (close_prev > short_prev and close_curr < short_curr)  and is_high_volume and is_red_candle:
         logging.info("Red Candle after potential breakdown")
-        return 'sell'
+        return 'watch'
 
     # 4. EMA Compression (Squeeze) → Trend Reversal Alert
     if ema_gap <= compression_threshold:
@@ -198,13 +198,13 @@ def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_e
 
     # 5. Long Lower Wick Near EMA + High Volume → Buy Signal
     if (lower_wick > upper_wick and abs(low_curr - short_curr) <= support_threshold and
-            is_green_candle ):
+            is_green_candle  and is_high_volume ):
         logging.info("Long lower wick near EMA with high volume. Strong BUY signal.")
         return 'buy'
 
     # 6. Long Upper Wick Near EMA + High Volume → Sell Signal
     if (upper_wick > lower_wick and abs(high_curr - short_curr) <= support_threshold and
-            is_red_candle ):
+            is_red_candle and is_low_volume ):
         logging.info("Long upper wick near EMA with high volume. Strong SELL signal.")
         return 'sell'
 
