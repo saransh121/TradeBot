@@ -392,7 +392,7 @@ def monitor_positions():
                 if (unrealized_profit >= notional_value * fee_adjusted_profit) or (unrealized_profit <= -notional_value * 0.10)  :
                     if unrealized_profit >= notional_value * fee_adjusted_profit:
                         logging.info(f"Profit target hit for {symbol}. Closing position.")
-                    elif unrealized_profit <= -notional_value * 0.10:
+                    elif unrealized_profit <= -notional_value * 0.25:
                         logging.info(f"ROI below -15% for {symbol}. Closing position.")
 
                     side = 'sell' if position['side'] == 'long' else 'buy'
