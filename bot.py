@@ -313,9 +313,10 @@ def should_trade(symbol, model, scaler, data, balance):
             return None, 0
 
         current_price = data['close'].iloc[-1]
-        lstm_input = prepare_lstm_input(data, scaler, n_steps=N_STEPS)
-        if lstm_input is None:
-            return None, 0
+        #lstm_input =
+        #prepare_lstm_input(data, scaler, n_steps=N_STEPS)
+        # if lstm_input is None:
+        #     return None, 0
 
         predicted_price = 1
         #model.predict(lstm_input)[0][0]
