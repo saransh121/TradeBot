@@ -424,7 +424,7 @@ def trade():
                         scaler_path = f"models_lstm/scaler_{symbol.replace('/', '_')}.pkl"
                         #os.path.exists(model_path) and os.path.exists(scaler_path)
                         if data is not None:
-                            model = load_model(model_path, compile=False)
+                            model = None
                             scaler = joblib.load(scaler_path)
                             action, size = should_trade(symbol, model, 0, data, balance)
                             if action == 'buy':
