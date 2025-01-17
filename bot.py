@@ -168,6 +168,8 @@ def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_e
     is_high_volume = volume_curr > 1.1 * avg_volume  # 20% higher than average
     is_low_volume = volume_curr < 0.9 * avg_volume   # 20% lower than average
 
+
+    wick_body_ratio = 1.5
     # --- Enhanced Logic with Buffer and Momentum Analysis ---
 
     # 1. High Volume Breakout Above EMA → Strong Buy (with Buffer and Momentum)
@@ -197,15 +199,21 @@ def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_e
         return 'watch'
 
     # 5. Long Lower Wick Near EMA + High Volume → Buy Signal
-    if (lower_wick > upper_wick and abs(low_curr - short_curr) <= support_threshold and
-            is_green_candle  and is_high_volume ):
-        logging.info("Long lower wick near EMA with high volume. Strong BUY signal.")
+    if (lower_wick > wick_body_ratio * body_size and  # Wick is 1.5x the body
+            abs(low_curr - short_curr) <= support_threshold and  # Close to EMA support
+            is_green_candle and  # Bullish candle
+            short_slope > 0 and long_slope > 0 and  # EMAs trending upward
+            is_high_volume):  # Confirmed by high volume
+        logging.info("Long lower wick near EMA with high volume and upward trend. Strong BUY signal.")
         return 'buy'
 
     # 6. Long Upper Wick Near EMA + High Volume → Sell Signal
-    if (upper_wick > lower_wick and abs(high_curr - short_curr) <= support_threshold and
-            is_red_candle and is_low_volume ):
-        logging.info("Long upper wick near EMA with high volume. Strong SELL signal.")
+    if (upper_wick > wick_body_ratio * body_size and  # Wick is 1.5x the body
+            abs(high_curr - short_curr) <= support_threshold and  # Close to EMA resistance
+            is_red_candle and  # Bearish candle
+            short_slope < 0 and long_slope < 0 and  # EMAs trending downward
+            (is_high_volume or not is_low_volume)):  # Volume is high or average
+        logging.info("Long upper wick near EMA with volume confirmation and downward trend. Strong SELL signal.")
         return 'sell'
 
     return None
