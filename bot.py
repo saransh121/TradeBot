@@ -34,7 +34,7 @@ N_STEPS = 60  # For LSTM input sequence length
 
 # Trading Pairs
 TRADING_PAIRS = ["XRP/USDT", "DOGE/USDT", "ADA/USDT", "TRX/USDT","ENA/USDT"
-                 ,"USUAL/USDT","HBAR/USDT"
+                 ,"ONE/USDT","HBAR/USDT"
                  ,"XLM/USDT","PNUT/USDT"]
 #TRADING_PAIRS = ["XRP/USDT", 
 #                     "DOGE/USDT", "ADA/USDT"]
