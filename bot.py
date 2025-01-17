@@ -541,7 +541,7 @@ def trade():
                 logging.info("Insufficient balance. Waiting for funds.")
                 time.sleep(60)  # Longer wait on low balance
 
-            time.sleep(25)  # Regular wait before checking again
+            time.sleep(20)  # Regular wait before checking again
 
         except Exception as e:
             logging.error(f"Error in main loop: {e}")
