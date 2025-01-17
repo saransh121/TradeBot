@@ -384,6 +384,7 @@ def should_trade(symbol, model, scaler, data, balance):
 def monitor_positions():
     """
     Monitor open positions and close them when the dynamic profit target is achieved or ROI drops below -15%.
+    This version is calibrated for the 15m timeframe.
     """
     try:
         positions = exchange.fetch_positions()
@@ -392,18 +393,25 @@ def monitor_positions():
                 symbol = position['symbol']
                 unrealized_profit = float(position['unrealizedPnl'])
                 notional_value = float(position['initialMargin'])
-                
-                # Fetch market data for dynamic profit calculation
+
+                # Fetch market data for ATR calculation
                 ohlcv = exchange.fetch_ohlcv(symbol, timeframe='15m', limit=14)
-                high_prices = [candle[2] for candle in ohlcv]  # High prices
-                low_prices = [candle[3] for candle in ohlcv]   # Low prices
+                high_prices = [candle[2] for candle in ohlcv]
+                low_prices = [candle[3] for candle in ohlcv]
+                close_prices = [candle[4] for candle in ohlcv]
 
-                # Calculate ATR (Average True Range) for dynamic profit target
-                atr = max(high_prices) - min(low_prices)  # Simplified ATR
-                dynamic_profit_target = max(0.05, min(0.15, atr / notional_value))  # Range between 5%-15%
+                # ATR calculation
+                tr_values = [
+                    max(high - low, abs(high - prev_close), abs(low - prev_close))
+                    for high, low, prev_close in zip(high_prices[1:], low_prices[1:], close_prices[:-1])
+                ]
+                atr = sum(tr_values) / len(tr_values)  # Average True Range
 
-                # Apply trailing stop (adjusts with profits)
-                trailing_stop = unrealized_profit * 0.8  # Lock 80% of profit if target hit
+                # Dynamic profit target: 2x ATR or a range between 5%-15%
+                dynamic_profit_target = max(0.05, min(0.15, 2 * atr / notional_value))
+
+                # Apply trailing stop (locks in 80% of profit when target hit)
+                trailing_stop = unrealized_profit * 0.8
 
                 logging.info(f"Monitoring {symbol}: Unrealized PnL={unrealized_profit}, ATR={atr}, Dynamic Target={dynamic_profit_target}")
 
@@ -430,6 +438,7 @@ def monitor_positions():
 
     except Exception as e:
         logging.error(f"Error monitoring positions: {e}")
+
 
 
 
