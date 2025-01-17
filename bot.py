@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(as
 # Parameters
 LEVERAGE = 45
 POSITION_SIZE_PERCENT = 4  # % of wallet balance to trade per coin
-TIMEFRAME = '3m'
+TIMEFRAME = '5m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
@@ -383,7 +383,7 @@ def should_trade(symbol, model, scaler, data, balance):
 
 def monitor_positions():
     """
-    Monitor open positions and close them when the profit target is achieved or ROI is below -15%.
+    Monitor open positions and close them when the dynamic profit target is achieved or ROI drops below -15%.
     """
     try:
         positions = exchange.fetch_positions()
@@ -392,20 +392,31 @@ def monitor_positions():
                 symbol = position['symbol']
                 unrealized_profit = float(position['unrealizedPnl'])
                 notional_value = float(position['initialMargin'])
-                fee_adjusted_profit = PROFIT_TARGET_PERCENT - 0.001  # Account for fees
+                
+                # Fetch market data for dynamic profit calculation
+                ohlcv = exchange.fetch_ohlcv(symbol, timeframe='5m', limit=14)
+                high_prices = [candle[2] for candle in ohlcv]  # High prices
+                low_prices = [candle[3] for candle in ohlcv]   # Low prices
 
-                logging.info(f"Monitoring {symbol}: Unrealized PnL={unrealized_profit}, Notional Value={notional_value}")
+                # Calculate ATR (Average True Range) for dynamic profit target
+                atr = max(high_prices) - min(low_prices)  # Simplified ATR
+                dynamic_profit_target = max(0.05, min(0.15, atr / notional_value))  # Range between 5%-15%
 
-                # Close position if profit target is achieved or ROI is below -15%
-                if (unrealized_profit >= notional_value * fee_adjusted_profit) or (unrealized_profit <= -notional_value * 0.25)  :
-                    if unrealized_profit >= notional_value * fee_adjusted_profit:
-                        logging.info(f"Profit target hit for {symbol}. Closing position.")
+                # Apply trailing stop (adjusts with profits)
+                trailing_stop = unrealized_profit * 0.8  # Lock 80% of profit if target hit
+
+                logging.info(f"Monitoring {symbol}: Unrealized PnL={unrealized_profit}, ATR={atr}, Dynamic Target={dynamic_profit_target}")
+
+                # Dynamic profit booking or stop-loss
+                if (unrealized_profit >= notional_value * dynamic_profit_target) or (unrealized_profit <= -notional_value * 0.25):
+                    if unrealized_profit >= notional_value * dynamic_profit_target:
+                        logging.info(f"Dynamic profit target hit for {symbol}. Closing position.")
                     elif unrealized_profit <= -notional_value * 0.25:
                         logging.info(f"ROI below -15% for {symbol}. Closing position.")
 
                     side = 'sell' if position['side'] == 'long' else 'buy'
                     size = abs(float(position['contracts']))
-                    
+
                     # Place the closing order
                     close_order = exchange.create_order(symbol, 'market', side, size)
                     logging.info(f"Position closed: {side} {size} {symbol}")
@@ -416,8 +427,10 @@ def monitor_positions():
                         if order['type'] == 'stop_market':
                             logging.info(f"Cancelling stop-loss order for {symbol}: {order['id']}")
                             exchange.cancel_order(order['id'], symbol)
+
     except Exception as e:
         logging.error(f"Error monitoring positions: {e}")
+
 
 
 
