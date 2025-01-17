@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(as
 # Parameters
 LEVERAGE = 45
 POSITION_SIZE_PERCENT = 4  # % of wallet balance to trade per coin
-TIMEFRAME = '5m'
+TIMEFRAME = '15m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
@@ -394,7 +394,7 @@ def monitor_positions():
                 notional_value = float(position['initialMargin'])
                 
                 # Fetch market data for dynamic profit calculation
-                ohlcv = exchange.fetch_ohlcv(symbol, timeframe='5m', limit=14)
+                ohlcv = exchange.fetch_ohlcv(symbol, timeframe='15m', limit=14)
                 high_prices = [candle[2] for candle in ohlcv]  # High prices
                 low_prices = [candle[3] for candle in ohlcv]   # Low prices
 
