@@ -444,38 +444,122 @@ def monitor_positions():
 
 
 # Main Trading Function
+# def trade():
+#     logging.info("Starting bot...")
+#     while True:
+#         try:
+#             balance = fetch_wallet_balance()
+#             if balance > 0:
+#                 for symbol in TRADING_PAIRS:
+#                     logging.info(f"Processing pair: {symbol}")
+#                     data = fetch_data(symbol, TIMEFRAME)
+#                     if data is not None:
+#                         model_path = f"models_lstm/lstm_{symbol.replace('/', '_')}.h5"
+#                         scaler_path = f"models_lstm/scaler_{symbol.replace('/', '_')}.pkl"
+#                         #os.path.exists(model_path) and os.path.exists(scaler_path)
+#                         if data is not None:
+#                             model = None
+#                             scaler = None
+#                             action, size = should_trade(symbol, model, 0, data, balance)
+#                             if action == 'buy':
+#                                 place_order(symbol, 'buy', size)
+#                             elif action == 'sell':
+#                                 place_order(symbol, 'sell', size)
+#                         else:
+#                             logging.warning(f"No LSTM model or scaler found for {symbol}")
+
+#                 # Monitor positions after trading
+#                 # monitor_positions()
+#             else:
+#                 logging.info("Insufficient balance. Waiting for funds.")
+#             time.sleep(25)  # Adjust as needed
+#         except Exception as e:
+#             logging.error(f"Error in main loop: {e}")
+#             time.sleep(10)
+
+#new Trade Logic
+last_trade_time = {}
+cooldown_period = 180  # 3-minute cooldown between trades on the same symbol
+max_retries = 3
+retry_counter = {}
+
+# Main Trading Function
 def trade():
     logging.info("Starting bot...")
+
     while True:
         try:
             balance = fetch_wallet_balance()
+
             if balance > 0:
                 for symbol in TRADING_PAIRS:
                     logging.info(f"Processing pair: {symbol}")
-                    data = fetch_data(symbol, TIMEFRAME)
-                    if data is not None:
-                        model_path = f"models_lstm/lstm_{symbol.replace('/', '_')}.h5"
-                        scaler_path = f"models_lstm/scaler_{symbol.replace('/', '_')}.pkl"
-                        #os.path.exists(model_path) and os.path.exists(scaler_path)
-                        if data is not None:
-                            model = None
-                            scaler = None
-                            action, size = should_trade(symbol, model, 0, data, balance)
-                            if action == 'buy':
-                                place_order(symbol, 'buy', size)
-                            elif action == 'sell':
-                                place_order(symbol, 'sell', size)
-                        else:
-                            logging.warning(f"No LSTM model or scaler found for {symbol}")
 
-                # Monitor positions after trading
-                # monitor_positions()
+                    # Check cooldown for the symbol
+                    current_time = time.time()
+                    if symbol in last_trade_time and current_time - last_trade_time[symbol] < cooldown_period:
+                        logging.info(f"Cooldown active for {symbol}. Skipping this round.")
+                        continue  # Skip this symbol due to cooldown
+
+                    # Fetch market data
+                    data = fetch_data(symbol, TIMEFRAME)
+                    if data is None:
+                        logging.warning(f"Failed to fetch data for {symbol}")
+                        continue
+
+                    # Load model and scaler
+                    model_path = f"models_lstm/lstm_{symbol.replace('/', '_')}.h5"
+                    scaler_path = f"models_lstm/scaler_{symbol.replace('/', '_')}.pkl"
+
+                    if os.path.exists(model_path) and os.path.exists(scaler_path):
+                        model = None  # Replace with model loading logic
+                        scaler = None  # Replace with scaler loading logic
+
+                        # Get trading action
+                        action, size = should_trade(symbol, model, 0, data, balance)
+
+                        # Check signal confirmation
+                        confirmed_action = confirm_signal(symbol, action, data)
+
+                        # Place the trade if confirmed
+                        if confirmed_action == 'buy':
+                            if place_order(symbol, 'buy', size):
+                                last_trade_time[symbol] = current_time  # Reset cooldown
+                                retry_counter[symbol] = 0  # Reset retries
+                        elif confirmed_action == 'sell':
+                            if place_order(symbol, 'sell', size):
+                                last_trade_time[symbol] = current_time
+                                retry_counter[symbol] = 0
+                        else:
+                            logging.info(f"No confirmed signal for {symbol}. Skipping trade.")
+                    else:
+                        logging.warning(f"No LSTM model or scaler found for {symbol}")
+
+                # Monitor open positions after trading
+                monitor_positions()
             else:
                 logging.info("Insufficient balance. Waiting for funds.")
-            time.sleep(25)  # Adjust as needed
+                time.sleep(60)  # Longer wait on low balance
+
+            time.sleep(25)  # Regular wait before checking again
+
         except Exception as e:
             logging.error(f"Error in main loop: {e}")
             time.sleep(10)
+
+# Signal confirmation function (checks signal consistency)
+def confirm_signal(symbol, action, data):
+    """
+    Confirms if the trading signal is consistent over two consecutive checks.
+    """
+    time.sleep(10)  # Wait before re-checking the signal
+    new_data = fetch_data(symbol, TIMEFRAME)
+    if new_data is not None:
+        new_action, _ = should_trade(symbol, None, 0, new_data, fetch_wallet_balance())
+        if new_action == action:
+            return action  # Confirmed signal
+    return None  # Signal was not consistent
+
 
 def monitor_thread():
     while True:
