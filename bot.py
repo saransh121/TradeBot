@@ -511,7 +511,7 @@ def trade():
                     model_path = f"models_lstm/lstm_{symbol.replace('/', '_')}.h5"
                     scaler_path = f"models_lstm/scaler_{symbol.replace('/', '_')}.pkl"
 
-                    if os.path.exists(model_path) and os.path.exists(scaler_path):
+                    if data is not None:
                         model = None  # Replace with model loading logic
                         scaler = None  # Replace with scaler loading logic
 
