@@ -412,7 +412,7 @@ def monitor_positions():
                 unrealized_profit = float(position['unrealizedPnl'])
                 notional_value = float(position['initialMargin'])
                 position_side = position['side']  # 'long' or 'short'
-
+                logging.info(f"position_side: {position_side}")
                 # Fetch market data for ATR calculation
                 ohlcv = exchange.fetch_ohlcv(symbol, timeframe='15m', limit=14)
                 high_prices = [candle[2] for candle in ohlcv]
