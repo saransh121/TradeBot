@@ -401,8 +401,8 @@ def should_trade(symbol, model, scaler, data, balance):
 
 def monitor_positions():
     """
-    Monitor open positions and close them when the dynamic profit target is achieved or ROI drops below -15%.
-    This version is calibrated for the 15m timeframe.
+    Monitor open positions and close them when the dynamic profit target is achieved or ROI drops below -20%.
+    Before closing at -20%, recheck the signal on a shorter timeframe to decide whether to close or hold.
     """
     try:
         positions = exchange.fetch_positions()
@@ -411,6 +411,7 @@ def monitor_positions():
                 symbol = position['symbol']
                 unrealized_profit = float(position['unrealizedPnl'])
                 notional_value = float(position['initialMargin'])
+                position_side = position['side']  # 'long' or 'short'
 
                 # Fetch market data for ATR calculation
                 ohlcv = exchange.fetch_ohlcv(symbol, timeframe='15m', limit=14)
@@ -427,38 +428,57 @@ def monitor_positions():
 
                 # Dynamic profit target: 2x ATR or a range between 5%-15%
                 if notional_value <= 7:
-                    dynamic_profit_target = max(0.05, min(0.1, 2 * atr * (LEVERAGE / 3) / notional_value))
+                    dynamic_profit_target = max(0.05, min(0.1, 2 * atr * (LEVERAGE / 2) / notional_value))
                 else:
-                    dynamic_profit_target = max(0.05, min(0.15, 2 * atr * (LEVERAGE / 3) / notional_value))
+                    dynamic_profit_target = max(0.05, min(0.15, 2 * atr * (LEVERAGE / 2) / notional_value))
 
                 # Apply trailing stop (locks in 80% of profit when target hit)
                 trailing_stop = unrealized_profit * 0.8
 
                 logging.info(f"Monitoring {symbol}: Unrealized PnL={unrealized_profit}, ATR={atr}, Dynamic Target={dynamic_profit_target}")
 
-                # Dynamic profit booking or stop-loss
-                if (unrealized_profit >= notional_value * dynamic_profit_target) or (unrealized_profit <= -notional_value * 0.25):
-                    if unrealized_profit >= notional_value * dynamic_profit_target:
-                        logging.info(f"Dynamic profit target hit for {symbol}. Closing position.")
-                    elif unrealized_profit <= -notional_value * 0.25:
-                        logging.info(f"ROI below -20% for {symbol}. Closing position.")
-
-                    side = 'sell' if position['side'] == 'long' else 'buy'
+                # Profit Target Hit
+                if unrealized_profit >= notional_value * dynamic_profit_target:
+                    logging.info(f"Dynamic profit target hit for {symbol}. Closing position.")
+                    side = 'sell' if position_side == 'long' else 'buy'
                     size = abs(float(position['contracts']))
+                    exchange.create_order(symbol, 'market', side, size)
 
-                    # Place the closing order
-                    close_order = exchange.create_order(symbol, 'market', side, size)
-                    logging.info(f"Position closed: {side} {size} {symbol}")
+                # Loss Reaches -20% → Perform Signal Reconfirmation
+                elif unrealized_profit <= -notional_value * 0.20:
+                    logging.info(f"{symbol} hit -20% loss. Checking if we should close or hold.")
 
-                    # Cancel any active stop-loss orders
-                    open_orders = exchange.fetch_open_orders(symbol)
-                    for order in open_orders:
-                        if order['type'] == 'stop_market':
-                            logging.info(f"Cancelling stop-loss order for {symbol}: {order['id']}")
-                            exchange.cancel_order(order['id'], symbol)
+                    # Recheck signal on a shorter timeframe (5m)
+                    new_data = fetch_data(symbol, '5m')
+                    if new_data:
+                        new_action, _ = should_trade(symbol, None, 0, new_data, fetch_wallet_balance())
+
+                        # Close if reversal is detected
+                        if (position_side == 'long' and new_action == 'sell') or (position_side == 'short' and new_action == 'buy'):
+                            logging.info(f"Rechecked signal suggests reversal for {symbol}. Closing position.")
+                            side = 'sell' if position_side == 'long' else 'buy'
+                            size = abs(float(position['contracts']))
+                            exchange.create_order(symbol, 'market', side, size)
+                        else:
+                            logging.info(f"Signal suggests holding {symbol}. Waiting for recovery.")
+
+                # Full Stop-Loss at -30% for Safety
+                elif unrealized_profit <= -notional_value * 0.30:
+                    logging.info(f"Hard stop-loss hit for {symbol}. Closing position.")
+                    side = 'sell' if position_side == 'long' else 'buy'
+                    size = abs(float(position['contracts']))
+                    exchange.create_order(symbol, 'market', side, size)
+
+                # Cancel any active stop-loss orders after closing
+                open_orders = exchange.fetch_open_orders(symbol)
+                for order in open_orders:
+                    if order['type'] == 'stop_market':
+                        logging.info(f"Cancelling stop-loss order for {symbol}: {order['id']}")
+                        exchange.cancel_order(order['id'], symbol)
 
     except Exception as e:
         logging.error(f"Error monitoring positions: {e}")
+
 
 
 
