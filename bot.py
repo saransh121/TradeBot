@@ -401,8 +401,8 @@ def should_trade(symbol, model, scaler, data, balance):
 
 def monitor_positions():
     """
-    Monitor open positions and close them when the dynamic profit target is achieved or ROI drops below -20%.
-    Before closing at -20%, recheck the signal on a shorter timeframe to decide whether to close or hold.
+    Monitors open positions and manages them based on dynamic profit targets, signal confirmation at -20% loss,
+    and a hard stop-loss at -30%. Ensures critical conditions are evaluated independently.
     """
     try:
         positions = exchange.fetch_positions()
@@ -412,40 +412,39 @@ def monitor_positions():
                 unrealized_profit = float(position['unrealizedPnl'])
                 notional_value = float(position['initialMargin'])
                 position_side = position['side']  # 'long' or 'short'
-                logging.info(f"position_side: {position_side}")
+
                 # Fetch market data for ATR calculation
                 ohlcv = exchange.fetch_ohlcv(symbol, timeframe='15m', limit=14)
                 high_prices = [candle[2] for candle in ohlcv]
                 low_prices = [candle[3] for candle in ohlcv]
                 close_prices = [candle[4] for candle in ohlcv]
 
-                # ATR calculation
+                # ATR calculation (Average True Range)
                 tr_values = [
                     max(high - low, abs(high - prev_close), abs(low - prev_close))
                     for high, low, prev_close in zip(high_prices[1:], low_prices[1:], close_prices[:-1])
                 ]
-                atr = sum(tr_values) / len(tr_values)  # Average True Range
+                atr = sum(tr_values) / len(tr_values)
 
-                # Dynamic profit target: 2x ATR or a range between 5%-15%
+                # Dynamic profit target calculation
                 if notional_value <= 7:
                     dynamic_profit_target = max(0.05, min(0.1, 2 * atr * (LEVERAGE / 2) / notional_value))
                 else:
                     dynamic_profit_target = max(0.05, min(0.15, 2 * atr * (LEVERAGE / 2) / notional_value))
 
-                # Apply trailing stop (locks in 80% of profit when target hit)
-                trailing_stop = unrealized_profit * 0.8
-
+                # Logging position details
                 logging.info(f"Monitoring {symbol}: Unrealized PnL={unrealized_profit}, ATR={atr}, Dynamic Target={dynamic_profit_target}")
 
-                # Profit Target Hit
+                # 1️⃣ Profit Target Hit → Close Position
                 if unrealized_profit >= notional_value * dynamic_profit_target:
                     logging.info(f"Dynamic profit target hit for {symbol}. Closing position.")
                     side = 'sell' if position_side == 'long' else 'buy'
                     size = abs(float(position['contracts']))
                     exchange.create_order(symbol, 'market', side, size)
+                    continue  # Move to next position after closing
 
-                # Loss Reaches -20% → Perform Signal Reconfirmation
-                elif unrealized_profit <= -notional_value * 0.20:
+                # 2️⃣ Loss Reaches -20% → Perform Signal Reconfirmation
+                if unrealized_profit <= -notional_value * 0.20:
                     logging.info(f"{symbol} hit -20% loss. Checking if we should close or hold.")
 
                     # Recheck signal on a shorter timeframe (5m)
@@ -459,17 +458,19 @@ def monitor_positions():
                             side = 'sell' if position_side == 'long' else 'buy'
                             size = abs(float(position['contracts']))
                             exchange.create_order(symbol, 'market', side, size)
+                            continue  # Move to next position after closing
                         else:
                             logging.info(f"Signal suggests holding {symbol}. Waiting for recovery.")
 
-                # Full Stop-Loss at -30% for Safety
-                elif unrealized_profit <= -notional_value * 0.30:
-                    logging.info(f"Hard stop-loss hit for {symbol}. Closing position.")
+                # 3️⃣ Full Stop-Loss at -30% → Force Close
+                if unrealized_profit <= -notional_value * 0.30:
+                    logging.info(f"Hard stop-loss hit for {symbol}. Forcing close at -30%.")
                     side = 'sell' if position_side == 'long' else 'buy'
                     size = abs(float(position['contracts']))
                     exchange.create_order(symbol, 'market', side, size)
+                    continue  # Move to next position after closing
 
-                # Cancel any active stop-loss orders after closing
+                # 4️⃣ Clean Up: Cancel any active stop-loss orders after position closure
                 open_orders = exchange.fetch_open_orders(symbol)
                 for order in open_orders:
                     if order['type'] == 'stop_market':
@@ -478,6 +479,7 @@ def monitor_positions():
 
     except Exception as e:
         logging.error(f"Error monitoring positions: {e}")
+
 
 
 
