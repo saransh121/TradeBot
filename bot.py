@@ -437,10 +437,10 @@ def monitor_positions():
                 logging.info(f"Monitoring {symbol}: Unrealized PnL={unrealized_profit}, ATR={atr}, Dynamic Target={dynamic_profit_target}")
 
                 # Dynamic profit booking or stop-loss
-                if (unrealized_profit >= notional_value * dynamic_profit_target) or (unrealized_profit <= -notional_value * 0.2):
+                if (unrealized_profit >= notional_value * dynamic_profit_target) or (unrealized_profit <= -notional_value * 0.18):
                     if unrealized_profit >= notional_value * dynamic_profit_target:
                         logging.info(f"Dynamic profit target hit for {symbol}. Closing position.")
-                    elif unrealized_profit <= -notional_value * 0.2:
+                    elif unrealized_profit <= -notional_value * 0.18:
                         logging.info(f"ROI below -20% for {symbol}. Closing position.")
 
                     side = 'sell' if position['side'] == 'long' else 'buy'
