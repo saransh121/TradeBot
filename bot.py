@@ -427,9 +427,9 @@ def monitor_positions():
 
                 # Dynamic profit target: 2x ATR or a range between 5%-15%
                 if notional_value <= 7:
-                    dynamic_profit_target = max(0.05, min(0.1, 2 * atr * (LEVERAGE / 2) / notional_value))
+                    dynamic_profit_target = max(0.05, min(0.1, 2 * atr * (LEVERAGE / 3) / notional_value))
                 else:
-                    dynamic_profit_target = max(0.05, min(0.15, 2 * atr * (LEVERAGE / 2) / notional_value))
+                    dynamic_profit_target = max(0.05, min(0.15, 2 * atr * (LEVERAGE / 3) / notional_value))
 
                 # Apply trailing stop (locks in 80% of profit when target hit)
                 trailing_stop = unrealized_profit * 0.8
@@ -437,10 +437,10 @@ def monitor_positions():
                 logging.info(f"Monitoring {symbol}: Unrealized PnL={unrealized_profit}, ATR={atr}, Dynamic Target={dynamic_profit_target}")
 
                 # Dynamic profit booking or stop-loss
-                if (unrealized_profit >= notional_value * dynamic_profit_target) or (unrealized_profit <= -notional_value * 0.18):
+                if (unrealized_profit >= notional_value * dynamic_profit_target) or (unrealized_profit <= -notional_value * 0.25):
                     if unrealized_profit >= notional_value * dynamic_profit_target:
                         logging.info(f"Dynamic profit target hit for {symbol}. Closing position.")
-                    elif unrealized_profit <= -notional_value * 0.18:
+                    elif unrealized_profit <= -notional_value * 0.25:
                         logging.info(f"ROI below -20% for {symbol}. Closing position.")
 
                     side = 'sell' if position['side'] == 'long' else 'buy'
