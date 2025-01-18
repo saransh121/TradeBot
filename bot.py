@@ -574,7 +574,7 @@ def confirm_signal(symbol, action, data):
     Confirms if the trading signal is consistent over two consecutive checks.
     """
     time.sleep(10)  # Wait before re-checking the signal
-    new_data = fetch_data(symbol, TIMEFRAME)
+    new_data = fetch_data(symbol, '3m')
     if new_data is not None:
         new_action, _ = should_trade(symbol, None, 0, new_data, fetch_wallet_balance())
         if new_action == action:
