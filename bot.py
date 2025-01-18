@@ -450,7 +450,7 @@ def monitor_positions():
 
                     # Recheck signal on a shorter timeframe (5m)
                     new_data = fetch_data(symbol, '5m')
-                    if new_data:
+                    if new_data is not None and not new_data.empty:
                         new_action, _ = should_trade(symbol, None, 0, new_data, fetch_wallet_balance())
 
                         # Close if reversal is detected
