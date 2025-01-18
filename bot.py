@@ -402,7 +402,7 @@ def should_trade(symbol, model, scaler, data, balance):
 def monitor_positions():
     """
     Monitors open positions and manages them based on dynamic profit targets, signal confirmation at -20% loss,
-    and a hard stop-loss at -30%. Ensures critical conditions are evaluated independently.
+    and a hard stop-loss at -30%. Cancels stop-loss orders only after closing positions.
     """
     try:
         positions = exchange.fetch_positions()
@@ -435,12 +435,24 @@ def monitor_positions():
                 # Logging position details
                 logging.info(f"Monitoring {symbol}: Unrealized PnL={unrealized_profit}, ATR={atr}, Dynamic Target={dynamic_profit_target}")
 
-                # 1️⃣ Profit Target Hit → Close Position
-                if unrealized_profit >= notional_value * dynamic_profit_target:
-                    logging.info(f"Dynamic profit target hit for {symbol}. Closing position.")
+                # Function to close position and cancel stop-loss
+                def close_position():
                     side = 'sell' if position_side == 'long' else 'buy'
                     size = abs(float(position['contracts']))
                     exchange.create_order(symbol, 'market', side, size)
+                    logging.info(f"Position closed for {symbol}: {side} {size}")
+
+                    # Cancel stop-loss orders after closing
+                    open_orders = exchange.fetch_open_orders(symbol)
+                    for order in open_orders:
+                        if order['type'] == 'stop_market':
+                            logging.info(f"Cancelling stop-loss order for {symbol}: {order['id']}")
+                            exchange.cancel_order(order['id'], symbol)
+
+                # 1️⃣ Profit Target Hit → Close Position
+                if unrealized_profit >= notional_value * dynamic_profit_target:
+                    logging.info(f"Dynamic profit target hit for {symbol}. Closing position.")
+                    close_position()
                     continue  # Move to next position after closing
 
                 # 2️⃣ Loss Reaches -20% → Perform Signal Reconfirmation
@@ -455,9 +467,7 @@ def monitor_positions():
                         # Close if reversal is detected
                         if (position_side == 'long' and new_action == 'sell') or (position_side == 'short' and new_action == 'buy'):
                             logging.info(f"Rechecked signal suggests reversal for {symbol}. Closing position.")
-                            side = 'sell' if position_side == 'long' else 'buy'
-                            size = abs(float(position['contracts']))
-                            exchange.create_order(symbol, 'market', side, size)
+                            close_position()
                             continue  # Move to next position after closing
                         else:
                             logging.info(f"Signal suggests holding {symbol}. Waiting for recovery.")
@@ -465,24 +475,11 @@ def monitor_positions():
                 # 3️⃣ Full Stop-Loss at -30% → Force Close
                 if unrealized_profit <= -notional_value * 0.30:
                     logging.info(f"Hard stop-loss hit for {symbol}. Forcing close at -30%.")
-                    side = 'sell' if position_side == 'long' else 'buy'
-                    size = abs(float(position['contracts']))
-                    exchange.create_order(symbol, 'market', side, size)
+                    close_position()
                     continue  # Move to next position after closing
-
-                # 4️⃣ Clean Up: Cancel any active stop-loss orders after position closure
-                open_orders = exchange.fetch_open_orders(symbol)
-                for order in open_orders:
-                    if order['type'] == 'stop_market':
-                        logging.info(f"Cancelling stop-loss order for {symbol}: {order['id']}")
-                        exchange.cancel_order(order['id'], symbol)
 
     except Exception as e:
         logging.error(f"Error monitoring positions: {e}")
-
-
-
-
 
 
 
