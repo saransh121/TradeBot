@@ -435,7 +435,7 @@ def monitor_positions():
                 sensitivity_factor = 0.55
                 dynamic_multiplier = (atr / current_price) * sensitivity_factor
                 # Buffer based on ATR
-                buffer = 0
+                buffer = 0.000009
                 #max(atr * dynamic_multiplier, 0.0001)  # Adjust multiplier as needed (e.g., 0.5x ATR)
                 unrealized_profit = float(position['unrealizedPnl'])
                 notional_value = float(position['initialMargin'])
@@ -455,8 +455,8 @@ def monitor_positions():
                 logging.info(f"symbole {symbol}")
                 logging.info(f"prv closed {prev_candle[4]}")
                 logging.info(f"Buffer {buffer}")
-                logging.info(f"Buffer Closer value {curr_candle[1]}")
-                logging.info(f"condition check {(prev_candle[4] > (curr_candle[1]))}")
+                logging.info(f"Buffer Closer value {curr_candle[1] + buffer}")
+                logging.info(f"condition check {(prev_candle[4] > (curr_candle[1] + buffer))}")
                 # 1️⃣ Previous Close + Current Open with ATR Buffer → Close Position
                 if position_side == 'long':
                     if (prev_candle[4] > (curr_candle[1] )):  # Previous close > current open + ATR-based buffer
