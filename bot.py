@@ -451,7 +451,7 @@ def monitor_positions():
                         if order['type'] == 'stop_market':
                             logging.info(f"Cancelling stop-loss order for {symbol}: {order['id']}")
                             exchange.cancel_order(order['id'], symbol)
-
+                logging.info(f"Buffer Closer value {curr_candle[1] + buffer}")
                 # 1️⃣ Previous Close + Current Open with ATR Buffer → Close Position
                 if position_side == 'long':
                     if prev_candle[4] > curr_candle[1] + buffer:  # Previous close > current open + ATR-based buffer
