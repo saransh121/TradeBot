@@ -433,7 +433,7 @@ def monitor_positions():
                 curr_candle = ohlcv[-1]  # Most recent (forming) candle
 
                 # Buffer based on ATR
-                buffer = atr * 0.5  # Adjust multiplier as needed (e.g., 0.5x ATR)
+                buffer = max(atr * 0.3, 0.01)  # Adjust multiplier as needed (e.g., 0.5x ATR)
 
                 # Function to close position and cancel stop-loss
                 def close_position():
