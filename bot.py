@@ -415,7 +415,7 @@ def monitor_positions():
                 position_side = position['side']  # 'long' or 'short'
 
                 # Fetch last 14 candles for ATR calculation
-                ohlcv = exchange.fetch_ohlcv(symbol, timeframe='5m', limit=14)
+                ohlcv = exchange.fetch_ohlcv(symbol, timeframe='3m', limit=14)
 
                 # ATR calculation (Average True Range)
                 high_prices = [candle[2] for candle in ohlcv]
@@ -472,8 +472,8 @@ def monitor_positions():
                         continue
                 
                 # 1️⃣ Profit Target Hit → Close Position
-                if unrealized_profit >= notional_value * 0.3:
-                    logging.info(f"30 % profit target hit for {symbol}. Closing position.")
+                if unrealized_profit >= notional_value * 0.35:
+                    logging.info(f"35 % profit target hit for {symbol}. Closing position.")
                     close_position()
                     continue  # Move to next position after closing
 
