@@ -459,13 +459,13 @@ def monitor_positions():
                 logging.info(f"condition check {(prev_candle[4] > (curr_candle[1] + buffer))}")
                 # 1️⃣ Previous Close + Current Open with ATR Buffer → Close Position
                 if position_side == 'long':
-                    if (prev_candle[4] > (curr_candle[1] )):  # Previous close > current open + ATR-based buffer
+                    if (prev_candle[4] > (curr_candle[1] +buffer )):  # Previous close > current open + ATR-based buffer
                         logging.info(f"Bearish reversal with ATR buffer detected for {symbol}. Closing long position.")
                         logging.info(f"Closing position for {symbol}: prev_candle[4]={prev_candle[4]}, curr_candle[1]={curr_candle[1]}, buffer={buffer}")
                         close_position()
                         continue
                 elif position_side == 'short':
-                    if (prev_candle[4] < (curr_candle[1])):  # Previous close < current open - ATR-based buffer
+                    if (prev_candle[4] < (curr_candle[1] + buffer)):  # Previous close < current open - ATR-based buffer
                         logging.info(f"Closing position for {symbol}: prev_candle[4]={prev_candle[4]}, curr_candle[1]={curr_candle[1]}, buffer={buffer}")
                         logging.info(f"Bullish reversal with ATR buffer detected for {symbol}. Closing short position.")
                         close_position()
