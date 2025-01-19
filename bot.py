@@ -435,7 +435,7 @@ def monitor_positions():
                 sensitivity_factor = 0.55
                 dynamic_multiplier = (atr / current_price) * sensitivity_factor
                 # Buffer based on ATR
-                buffer = 0.00015
+                buffer = 0.00010
                 #max(atr * dynamic_multiplier, 0.0001)  # Adjust multiplier as needed (e.g., 0.5x ATR)
                 unrealized_profit = float(position['unrealizedPnl'])
                 notional_value = float(position['initialMargin'])
@@ -459,13 +459,13 @@ def monitor_positions():
                 logging.info(f"condition check {(prev_candle[4] > (curr_candle[1] + buffer))}")
                 # 1️⃣ Previous Close + Current Open with ATR Buffer → Close Position
                 if position_side == 'long':
-                    if (prev_candle[4] > (curr_candle[1] +buffer )):  # Previous close > current open + ATR-based buffer
+                    if (prev_candle[4] > (curr_candle[1] + buffer )):  # Previous close > current open + ATR-based buffer
                         logging.info(f"Bearish reversal with ATR buffer detected for {symbol}. Closing long position.")
                         logging.info(f"Closing position for {symbol}: prev_candle[4]={prev_candle[4]}, curr_candle[1]={curr_candle[1]}, buffer={buffer}")
                         close_position()
                         continue
                 elif position_side == 'short':
-                    if (prev_candle[4] < (curr_candle[1] + buffer)):  # Previous close < current open - ATR-based buffer
+                    if (prev_candle[4] < (curr_candle[1] - buffer)):  # Previous close < current open - ATR-based buffer
                         logging.info(f"Closing position for {symbol}: prev_candle[4]={prev_candle[4]}, curr_candle[1]={curr_candle[1]}, buffer={buffer}")
                         logging.info(f"Bullish reversal with ATR buffer detected for {symbol}. Closing short position.")
                         close_position()
