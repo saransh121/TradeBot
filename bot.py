@@ -401,39 +401,39 @@ def should_trade(symbol, model, scaler, data, balance):
 
 def monitor_positions():
     """
-    Monitors open positions and manages them based on dynamic profit targets, signal confirmation at -20% loss,
-    and a hard stop-loss at -30%. Cancels stop-loss orders only after closing positions.
+    Monitors open positions and manages them based on:
+    1. ATR-based buffer for Previous Close + Current Open logic.
+    2. Signal confirmation at -20% loss.
+    3. A hard stop-loss at -30%.
+    Cancels stop-loss orders only after closing positions.
     """
     try:
         positions = exchange.fetch_positions()
         for position in positions:
             if float(position['contracts']) > 0:  # Active positions only
                 symbol = position['symbol']
-                unrealized_profit = float(position['unrealizedPnl'])
-                notional_value = float(position['initialMargin'])
                 position_side = position['side']  # 'long' or 'short'
 
-                # Fetch market data for ATR calculation
+                # Fetch last 14 candles for ATR calculation
                 ohlcv = exchange.fetch_ohlcv(symbol, timeframe='15m', limit=14)
-                high_prices = [candle[2] for candle in ohlcv]
-                low_prices = [candle[3] for candle in ohlcv]
-                close_prices = [candle[4] for candle in ohlcv]
 
                 # ATR calculation (Average True Range)
+                high_prices = [candle[2] for candle in ohlcv]
+                low_prices = [candle[3] for candle in ohlcv]
+                close_prices = [candle[4] for candle in ohlcv[:-1]]  # Exclude last candle for ATR
+
                 tr_values = [
                     max(high - low, abs(high - prev_close), abs(low - prev_close))
-                    for high, low, prev_close in zip(high_prices[1:], low_prices[1:], close_prices[:-1])
+                    for high, low, prev_close in zip(high_prices[1:], low_prices[1:], close_prices)
                 ]
                 atr = sum(tr_values) / len(tr_values)
 
-                # Dynamic profit target calculation
-                if notional_value <= 7:
-                    dynamic_profit_target = max(0.05, min(0.1, 2 * atr * (LEVERAGE / 2) / notional_value))
-                else:
-                    dynamic_profit_target = max(0.05, min(0.15, 2 * atr * (LEVERAGE / 2) / notional_value))
+                # Use the last two candles
+                prev_candle = ohlcv[-2]  # Second-to-last candle (closed)
+                curr_candle = ohlcv[-1]  # Most recent (forming) candle
 
-                # Logging position details
-                logging.info(f"Monitoring {symbol}: Unrealized PnL={unrealized_profit}, ATR={atr}, Dynamic Target={dynamic_profit_target}")
+                # Buffer based on ATR
+                buffer = atr * 0.5  # Adjust multiplier as needed (e.g., 0.5x ATR)
 
                 # Function to close position and cancel stop-loss
                 def close_position():
@@ -449,18 +449,24 @@ def monitor_positions():
                             logging.info(f"Cancelling stop-loss order for {symbol}: {order['id']}")
                             exchange.cancel_order(order['id'], symbol)
 
-                # 1️⃣ Profit Target Hit → Close Position
-                if unrealized_profit >= notional_value * dynamic_profit_target:
-                    logging.info(f"Dynamic profit target hit for {symbol}. Closing position.")
-                    close_position()
-                    continue  # Move to next position after closing
+                # 1️⃣ Previous Close + Current Open with ATR Buffer → Close Position
+                if position_side == 'long':
+                    if prev_candle[4] > curr_candle[1] + buffer:  # Previous close > current open + ATR-based buffer
+                        logging.info(f"Bearish reversal with ATR buffer detected for {symbol}. Closing long position.")
+                        close_position()
+                        continue
+                elif position_side == 'short':
+                    if prev_candle[4] < curr_candle[1] - buffer:  # Previous close < current open - ATR-based buffer
+                        logging.info(f"Bullish reversal with ATR buffer detected for {symbol}. Closing short position.")
+                        close_position()
+                        continue
 
                 # 2️⃣ Loss Reaches -20% → Perform Signal Reconfirmation
-                if unrealized_profit <= -notional_value * 0.10:
+                if float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.10:
                     logging.info(f"{symbol} hit -10% loss. Checking if we should close or hold.")
 
                     # Recheck signal on a shorter timeframe (5m)
-                    new_data = fetch_data(symbol, '5m')
+                    new_data = fetch_data(symbol, '3m')
                     if new_data is not None and not new_data.empty:
                         new_action, _ = should_trade(symbol, None, 0, new_data, fetch_wallet_balance())
 
@@ -468,18 +474,21 @@ def monitor_positions():
                         if (position_side == 'long' and new_action == 'sell') or (position_side == 'short' and new_action == 'buy'):
                             logging.info(f"Rechecked signal suggests reversal for {symbol}. Closing position.")
                             close_position()
-                            continue  # Move to next position after closing
+                            continue
                         else:
                             logging.info(f"Signal suggests holding {symbol}. Waiting for recovery.")
 
                 # 3️⃣ Full Stop-Loss at -30% → Force Close
-                if unrealized_profit <= -notional_value * 0.30:
+                if float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.30:
                     logging.info(f"Hard stop-loss hit for {symbol}. Forcing close at -30%.")
                     close_position()
-                    continue  # Move to next position after closing
+                    continue
 
     except Exception as e:
         logging.error(f"Error monitoring positions: {e}")
+
+
+
 
 
 
