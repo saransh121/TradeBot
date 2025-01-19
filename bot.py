@@ -435,7 +435,7 @@ def monitor_positions():
                 sensitivity_factor = 0.55
                 dynamic_multiplier = (atr / current_price) * sensitivity_factor
                 # Buffer based on ATR
-                buffer = 0.00010
+                buffer = 0.00005
                 #max(atr * dynamic_multiplier, 0.0001)  # Adjust multiplier as needed (e.g., 0.5x ATR)
                 unrealized_profit = float(position['unrealizedPnl'])
                 notional_value = float(position['initialMargin'])
