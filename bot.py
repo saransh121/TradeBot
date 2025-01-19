@@ -415,7 +415,7 @@ def monitor_positions():
                 position_side = position['side']  # 'long' or 'short'
 
                 # Fetch last 14 candles for ATR calculation
-                ohlcv = exchange.fetch_ohlcv(symbol, timeframe='3m', limit=14)
+                ohlcv = exchange.fetch_ohlcv(symbol, timeframe='5m', limit=14)
 
                 # ATR calculation (Average True Range)
                 high_prices = [candle[2] for candle in ohlcv]
@@ -432,7 +432,7 @@ def monitor_positions():
                 prev_candle = ohlcv[-2]  # Second-to-last candle (closed)
                 curr_candle = ohlcv[-1]  # Most recent (forming) candle
                 current_price = float(curr_candle[4])
-                sensitivity_factor = 0.3
+                sensitivity_factor = 0.4
                 dynamic_multiplier = (atr / current_price) * sensitivity_factor
                 # Buffer based on ATR
                 buffer = max(atr * dynamic_multiplier, 0.00007)
