@@ -456,8 +456,8 @@ def monitor_positions():
                     continue  # Move to next position after closing
 
                 # 2️⃣ Loss Reaches -20% → Perform Signal Reconfirmation
-                if unrealized_profit <= -notional_value * 0.20:
-                    logging.info(f"{symbol} hit -20% loss. Checking if we should close or hold.")
+                if unrealized_profit <= -notional_value * 0.10:
+                    logging.info(f"{symbol} hit -10% loss. Checking if we should close or hold.")
 
                     # Recheck signal on a shorter timeframe (5m)
                     new_data = fetch_data(symbol, '5m')
