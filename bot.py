@@ -432,7 +432,7 @@ def monitor_positions():
                 prev_candle = ohlcv[-2]  # Second-to-last candle (closed)
                 curr_candle = ohlcv[-1]  # Most recent (forming) candle
                 current_price = float(curr_candle[4])
-                sensitivity_factor = 1.0
+                sensitivity_factor = 0.55
                 dynamic_multiplier = (atr / current_price) * sensitivity_factor
                 # Buffer based on ATR
                 buffer = max(atr * dynamic_multiplier, 0.01)  # Adjust multiplier as needed (e.g., 0.5x ATR)
