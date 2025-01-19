@@ -436,7 +436,8 @@ def monitor_positions():
                 dynamic_multiplier = (atr / current_price) * sensitivity_factor
                 # Buffer based on ATR
                 buffer = max(atr * dynamic_multiplier, 0.01)  # Adjust multiplier as needed (e.g., 0.5x ATR)
-
+                unrealized_profit = float(position['unrealizedPnl'])
+                notional_value = float(position['initialMargin'])
                 # Function to close position and cancel stop-loss
                 def close_position():
                     side = 'sell' if position_side == 'long' else 'buy'
@@ -462,6 +463,12 @@ def monitor_positions():
                         logging.info(f"Bullish reversal with ATR buffer detected for {symbol}. Closing short position.")
                         close_position()
                         continue
+                
+                # 1️⃣ Profit Target Hit → Close Position
+                if unrealized_profit >= notional_value * 0.3:
+                    logging.info(f"30 % profit target hit for {symbol}. Closing position.")
+                    close_position()
+                    continue  # Move to next position after closing
 
                 # 2️⃣ Loss Reaches -20% → Perform Signal Reconfirmation
                 if float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.10:
