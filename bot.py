@@ -415,7 +415,7 @@ def monitor_positions():
                 position_side = position['side']  # 'long' or 'short'
 
                 # Fetch last 14 candles for ATR calculation
-                ohlcv = exchange.fetch_ohlcv(symbol, timeframe='5m', limit=14)
+                ohlcv = exchange.fetch_ohlcv(symbol, timeframe='3m', limit=14)
 
                 # ATR calculation (Average True Range)
                 high_prices = [candle[2] for candle in ohlcv]
@@ -463,19 +463,19 @@ def monitor_positions():
                 loss_min = 0.07    # 7%
                 loss_max = 0.20
                 # 1️⃣ Previous Close + Current Open with ATR Buffer → Close Position
-                if (unrealized_profit >= notional_value * profit_min and unrealized_profit <= notional_value * profit_max) or (unrealized_profit <= -notional_value * loss_min and unrealized_profit >= -notional_value * loss_max):
-                    if position_side == 'long':
-                        if (prev_candle[4] > (current_price + buffer )):  # Previous close > current open + ATR-based buffer
-                            logging.info(f"Bearish reversal with ATR buffer detected for {symbol}. Closing long position.")
-                            logging.info(f"Closing position for {symbol}: prev_candle[4]={prev_candle[4]}, curr_candle[1]={current_price}, buffer={buffer}")
-                            close_position()
-                            continue
-                    elif position_side == 'short':
-                        if (prev_candle[4] < (current_price - buffer)):  # Previous close < current open - ATR-based buffer
-                            logging.info(f"Closing position for {symbol}: prev_candle[4]={prev_candle[4]}, curr_candle[1]={current_price}, buffer={buffer}")
-                            logging.info(f"Bullish reversal with ATR buffer detected for {symbol}. Closing short position.")
-                            close_position()
-                            continue
+
+                if position_side == 'long':
+                    if (prev_candle[4] > (current_price + buffer )):  # Previous close > current open + ATR-based buffer
+                        logging.info(f"Bearish reversal with ATR buffer detected for {symbol}. Closing long position.")
+                        logging.info(f"Closing position for {symbol}: prev_candle[4]={prev_candle[4]}, curr_candle[1]={current_price}, buffer={buffer}")
+                        close_position()
+                        continue
+                elif position_side == 'short':
+                    if (prev_candle[4] < (current_price - buffer)):  # Previous close < current open - ATR-based buffer
+                        logging.info(f"Closing position for {symbol}: prev_candle[4]={prev_candle[4]}, curr_candle[1]={current_price}, buffer={buffer}")
+                        logging.info(f"Bullish reversal with ATR buffer detected for {symbol}. Closing short position.")
+                        close_position()
+                        continue
                 
                 # 1️⃣ Profit Target Hit → Close Position
                 if unrealized_profit >= notional_value * 0.15:
