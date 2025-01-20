@@ -440,7 +440,7 @@ def monitor_positions():
                 #max(atr * dynamic_multiplier, 0.0001)  # Adjust multiplier as needed (e.g., 0.5x ATR)
                 unrealized_profit = float(position['unrealizedPnl'])
                 notional_value = float(position['initialMargin'])
-                dynamic_profit_target = max(0.05, min(0.15, atr / notional_value * (LEVERAGE / 10)))
+                dynamic_profit_target = max(0.05, min(0.2, atr / notional_value * (LEVERAGE / 10)))
                 logging.info(f"dynamic profit target for the coin {symbol} is {dynamic_profit_target}")
 
                 # Function to close position and cancel stop-loss
