@@ -458,8 +458,12 @@ def monitor_positions():
                 logging.info(f"Buffer {buffer}")
                 logging.info(f"Buffer Closer value {curr_candle[1] + buffer}")
                 logging.info(f"condition check {(prev_candle[4] > (curr_candle[1] + buffer))}")
+                profit_min = 0.05  # 5%
+                profit_max = 0.15  # 15%
+                loss_min = 0.07    # 7%
+                loss_max = 0.20
                 # 1️⃣ Previous Close + Current Open with ATR Buffer → Close Position
-                if (unrealized_profit >= notional_value * 0.10) or ( float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.7):
+                if (unrealized_profit >= notional_value * profit_min and unrealized_profit <= notional_value * profit_max) or (unrealized_profit <= -notional_value * loss_min and unrealized_profit >= -notional_value * loss_max):
                     if position_side == 'long':
                         if (prev_candle[4] > (current_price + buffer )):  # Previous close > current open + ATR-based buffer
                             logging.info(f"Bearish reversal with ATR buffer detected for {symbol}. Closing long position.")
