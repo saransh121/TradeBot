@@ -343,7 +343,7 @@ def confirm_trade_signal_with_atr(symbol, timeframe=TIMEFRAME, limit=14):
     """
     try:
         # Fetch OHLCV data
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=limit)
 
         # ATR calculation (Average True Range)
         high_prices = [candle[2] for candle in ohlcv]
