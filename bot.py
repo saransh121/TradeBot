@@ -413,7 +413,7 @@ def should_trade(symbol, model, scaler, data, balance):
 
         crossover_signal = detect_crossover(data)
 
-        logging.info(f"Trade conditions for {symbol} - Predicted: {predicted_price}, Current: {current_price}, MA_10: {data['MA_10'].iloc[-1]}, MA_30: {data['MA_30'].iloc[-1]}, RSI: {data['RSI'].iloc[-1]} , MACD : {data['MACD'].iloc[-1]}, Signal {data['Signal'].iloc[-1]}")
+        logging.info(f"Trade conditions for {symbol} - Predicted: {predicted_price}, Current: {current_price}, MA_10: {data['MA_10'].iloc[-1]}, MA_30: {data['MA_30'].iloc[-1]}, RSI: {data['RSI'].iloc[-1]} , MACD : {data['MACD'].iloc[-1]}, Signal {data['Signal'].iloc[-1]} , ATR Confimation {confirm_trade_signal_with_atr(symbol=symbol)}")
         logging.info(f"buy threshold {buy_threshold} - sell threshold {sell_threshold}")
         logging.info(f"cross over signal {crossover_signal}")
         # Remove the proximity condition for buy and sell
