@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(as
 # Parameters
 LEVERAGE = 50
 POSITION_SIZE_PERCENT = 5  # % of wallet balance to trade per coin
-TIMEFRAME = '15m'
+TIMEFRAME = '5m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
@@ -440,7 +440,7 @@ def monitor_positions():
                 #max(atr * dynamic_multiplier, 0.0001)  # Adjust multiplier as needed (e.g., 0.5x ATR)
                 unrealized_profit = float(position['unrealizedPnl'])
                 notional_value = float(position['initialMargin'])
-                dynamic_profit_target = max(0.05, min(0.2, atr / notional_value * (LEVERAGE / 10)))
+                dynamic_profit_target = max(0.07, min(0.2, atr / notional_value * (LEVERAGE / 8)))
                 logging.info(f"dynamic profit target for the coin {symbol} is {dynamic_profit_target}")
 
                 # Function to close position and cancel stop-loss
@@ -464,11 +464,11 @@ def monitor_positions():
                     continue  # Move to next position after closing
 
                 # 3️⃣ Full Stop-Loss at -30% → Force Close
-                if float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.30:
-                    logging.info(f"Hard stop-loss hit for {symbol}. Forcing close at -30%.")
+                if float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.10:
+                    logging.info(f"Hard stop-loss hit for {symbol}. Forcing close at -10%.")
                     close_position()
                     continue
-                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.20:
+                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.05:
                     logging.info(f"{symbol} hit -20% loss. Checking if we should close or hold.")
 
                     if position_side == 'long':
@@ -483,10 +483,10 @@ def monitor_positions():
                             logging.info(f"Bullish reversal with ATR buffer detected for {symbol}. Closing short position.")
                             close_position()
                             continue
-                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.10:
+                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.03:
                     logging.info(f"{symbol} hit -10% loss. Checking if we should close or hold.")
                     # Recheck signal on a shorter timeframe (5m)
-                    new_data = fetch_data(symbol, '5m')
+                    new_data = fetch_data(symbol, '3m')
                     if new_data is not None and not new_data.empty:
                         new_action, _ = should_trade(symbol, None, 0, new_data, fetch_wallet_balance())
 
@@ -604,7 +604,7 @@ def trade():
                 logging.info("Insufficient balance. Waiting for funds.")
                 time.sleep(60)  # Longer wait on low balance
 
-            time.sleep(20)  # Regular wait before checking again
+            time.sleep(15)  # Regular wait before checking again
 
         except Exception as e:
             logging.error(f"Error in main loop: {e}")
@@ -615,7 +615,7 @@ def confirm_signal(symbol, action, data):
     """
     Confirms if the trading signal is consistent over two consecutive checks.
     """
-    time.sleep(10)  # Wait before re-checking the signal
+    time.sleep(5)  # Wait before re-checking the signal
     new_data = fetch_data(symbol, TIMEFRAME)
     if new_data is not None:
         new_action, _ = should_trade(symbol, None, 0, new_data, fetch_wallet_balance())
