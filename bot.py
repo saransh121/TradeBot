@@ -332,6 +332,54 @@ def validate_position_size(symbol, size, current_price):
         logging.error(f"Error validating position size for {symbol}: {e}")
         return 0
 
+def confirm_trade_signal_with_atr(symbol, timeframe=TIMEFRAME, limit=14):
+    """
+    Confirms trade signal based on ATR buffer logic using the previous close and current open price.
+
+    :param symbol: Trading pair symbol (e.g., 'BTC/USDT').
+    :param timeframe: Timeframe for OHLCV data (default: '3m').
+    :param limit: Number of candles to fetch for ATR calculation (default: 14).
+    :return: 'buy', 'sell', or None (no signal).
+    """
+    try:
+        # Fetch OHLCV data
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+
+        # ATR calculation (Average True Range)
+        high_prices = [candle[2] for candle in ohlcv]
+        low_prices = [candle[3] for candle in ohlcv]
+        close_prices = [candle[4] for candle in ohlcv[:-1]]  # Exclude last candle for ATR
+
+        tr_values = [
+            max(high - low, abs(high - prev_close), abs(low - prev_close))
+            for high, low, prev_close in zip(high_prices[1:], low_prices[1:], close_prices)
+        ]
+        atr = sum(tr_values) / len(tr_values)
+
+        # Use the last two candles
+        prev_candle = ohlcv[-2]  # Second-to-last candle (closed)
+        curr_candle = ohlcv[-1]  # Most recent (forming) candle
+        current_price = float(curr_candle[4])
+
+        # Dynamic sensitivity factor based on price
+        sensitivity_factor = 0.5 if current_price < 1 else 1.0
+        dynamic_multiplier = (atr / current_price) * sensitivity_factor
+
+        # Buffer based on ATR
+        buffer = max(atr * dynamic_multiplier, 0.00007)
+
+        # Signal logic for confirmation
+        if prev_candle[4] > (current_price + buffer):  # Bearish confirmation
+            return 'sell'
+        elif prev_candle[4] < (current_price - buffer):  # Bullish confirmation
+            return 'buy'
+
+        return None  # No signal (neutral)
+
+    except Exception as e:
+        logging.error(f"Error in confirming trade signal with ATR buffer for {symbol}: {e}")
+        return None
+
 
 # Determine Trade Signal
 def should_trade(symbol, model, scaler, data, balance):
@@ -371,6 +419,7 @@ def should_trade(symbol, model, scaler, data, balance):
         # Remove the proximity condition for buy and sell
         # Buy Condition
         if ((crossover_signal == 'buy' )
+            and confirm_trade_signal_with_atr(symbol=symbol) == 'buy'
            #   (predicted_price > (current_price * buy_threshold))
             #   and (crossover_signal == 'buy' ))
                 
@@ -383,6 +432,7 @@ def should_trade(symbol, model, scaler, data, balance):
 
         # Sell Condition
         elif ((crossover_signal == 'sell' )
+              and confirm_trade_signal_with_atr(symbol=symbol) == 'sell'
             #(predicted_price < (current_price * sell_threshold))
             #     and (crossover_signal == 'sell' ))
                 #  or ((data['MA_10'].iloc[-1] < data['MA_30'].iloc[-1]) 
