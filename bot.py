@@ -219,7 +219,7 @@ def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_e
     # 5. Long Lower Wick Near EMA + High Volume → Buy Signal
     if (lower_wick > wick_body_ratio * body_size and  # Wick is 1.5x the body
             abs(low_curr - short_curr) <= support_threshold and  # Close to EMA support
-            is_green_candle and  # Bullish candle
+              # Bullish candle
             short_slope > 0 and long_slope > 0 and  # EMAs trending upward
             is_high_volume):  # Confirmed by high volume
         logging.info("Long lower wick near EMA with high volume and upward trend. Strong BUY signal.")
@@ -228,7 +228,6 @@ def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_e
     # 6. Long Upper Wick Near EMA + High Volume → Sell Signal
     if (upper_wick > wick_body_ratio * body_size and  # Wick is 1.5x the body
             abs(high_curr - short_curr) <= support_threshold and  # Close to EMA resistance
-            is_red_candle and  # Bearish candle
             short_slope < 0 and long_slope < 0 and  # EMAs trending downward
             (is_high_volume or not is_low_volume)):  # Volume is high or average
         logging.info("Long upper wick near EMA with volume confirmation and downward trend. Strong SELL signal.")
@@ -432,14 +431,18 @@ def monitor_positions():
                 prev_candle = ohlcv[-2]  # Second-to-last candle (closed)
                 curr_candle = ohlcv[-1]  # Most recent (forming) candle
                 current_price = float(curr_candle[4])
-                sensitivity_factor = 1.0
+                sensitivity_factor = 0.5 if current_price < 1 else 1.0
                 dynamic_multiplier = (atr / current_price) * sensitivity_factor
+                
                 # Buffer based on ATR
                 buffer = max(atr * dynamic_multiplier, 0.00007)
-                #0.00007
+                
                 #max(atr * dynamic_multiplier, 0.0001)  # Adjust multiplier as needed (e.g., 0.5x ATR)
                 unrealized_profit = float(position['unrealizedPnl'])
                 notional_value = float(position['initialMargin'])
+                dynamic_profit_target = max(0.05, min(0.15, atr / notional_value * (LEVERAGE / 10)))
+                logging.info(f"dynamic profit target for the coin {symbol} is {dynamic_profit_target}")
+
                 # Function to close position and cancel stop-loss
                 def close_position():
                     side = 'sell' if position_side == 'long' else 'buy'
@@ -453,42 +456,37 @@ def monitor_positions():
                         if order['type'] == 'stop_market':
                             logging.info(f"Cancelling stop-loss order for {symbol}: {order['id']}")
                             exchange.cancel_order(order['id'], symbol)
-                logging.info(f"symbole {symbol}")
-                logging.info(f"prv closed {prev_candle[4]}")
-                logging.info(f"Buffer {buffer}")
-                logging.info(f"Buffer Closer value {curr_candle[1] + buffer}")
-                logging.info(f"condition check {(prev_candle[4] > (curr_candle[1] + buffer))}")
-                profit_min = 0.05  # 5%
-                profit_max = 0.15  # 15%
-                loss_min = 0.07    # 7%
-                loss_max = 0.20
-                # 1️⃣ Previous Close + Current Open with ATR Buffer → Close Position
-
-                if position_side == 'long':
-                    if (prev_candle[4] > (current_price + buffer )):  # Previous close > current open + ATR-based buffer
-                        logging.info(f"Bearish reversal with ATR buffer detected for {symbol}. Closing long position.")
-                        logging.info(f"Closing position for {symbol}: prev_candle[4]={prev_candle[4]}, curr_candle[1]={current_price}, buffer={buffer}")
-                        close_position()
-                        continue
-                elif position_side == 'short':
-                    if (prev_candle[4] < (current_price - buffer)):  # Previous close < current open - ATR-based buffer
-                        logging.info(f"Closing position for {symbol}: prev_candle[4]={prev_candle[4]}, curr_candle[1]={current_price}, buffer={buffer}")
-                        logging.info(f"Bullish reversal with ATR buffer detected for {symbol}. Closing short position.")
-                        close_position()
-                        continue
                 
-                # 1️⃣ Profit Target Hit → Close Position
-                if unrealized_profit >= notional_value * 0.15:
-                    logging.info(f"15 % profit target hit for {symbol}. Closing position.")
+                # 1️⃣ Previous Close + Current Open with ATR Buffer → Close Position
+                if unrealized_profit >= notional_value * dynamic_profit_target:
+                    logging.info(f"Dynamic profit target ({dynamic_profit_target * 100}%) hit for {symbol}. Closing position.")
                     close_position()
                     continue  # Move to next position after closing
 
-                # 2️⃣ Loss Reaches -20% → Perform Signal Reconfirmation
-                if float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.20:
-                    logging.info(f"{symbol} hit -10% loss. Checking if we should close or hold.")
+                # 3️⃣ Full Stop-Loss at -30% → Force Close
+                if float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.30:
+                    logging.info(f"Hard stop-loss hit for {symbol}. Forcing close at -30%.")
+                    close_position()
+                    continue
+                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.20:
+                    logging.info(f"{symbol} hit -20% loss. Checking if we should close or hold.")
 
+                    if position_side == 'long':
+                        if (prev_candle[4] > (current_price + buffer )):  # Previous close > current open + ATR-based buffer
+                            logging.info(f"Bearish reversal with ATR buffer detected for {symbol}. Closing long position.")
+                            logging.info(f"Closing position for {symbol}: prev_candle[4]={prev_candle[4]}, curr_candle[1]={current_price}, buffer={buffer}")
+                            close_position()
+                            continue
+                    elif position_side == 'short':
+                        if (prev_candle[4] < (current_price - buffer)):  # Previous close < current open - ATR-based buffer
+                            logging.info(f"Closing position for {symbol}: prev_candle[4]={prev_candle[4]}, curr_candle[1]={current_price}, buffer={buffer}")
+                            logging.info(f"Bullish reversal with ATR buffer detected for {symbol}. Closing short position.")
+                            close_position()
+                            continue
+                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.10:
+                    logging.info(f"{symbol} hit -10% loss. Checking if we should close or hold.")
                     # Recheck signal on a shorter timeframe (5m)
-                    new_data = fetch_data(symbol, '3m')
+                    new_data = fetch_data(symbol, '5m')
                     if new_data is not None and not new_data.empty:
                         new_action, _ = should_trade(symbol, None, 0, new_data, fetch_wallet_balance())
 
@@ -499,12 +497,6 @@ def monitor_positions():
                             continue
                         else:
                             logging.info(f"Signal suggests holding {symbol}. Waiting for recovery.")
-
-                # 3️⃣ Full Stop-Loss at -30% → Force Close
-                if float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.30:
-                    logging.info(f"Hard stop-loss hit for {symbol}. Forcing close at -30%.")
-                    close_position()
-                    continue
 
     except Exception as e:
         logging.error(f"Error monitoring positions: {e}")
