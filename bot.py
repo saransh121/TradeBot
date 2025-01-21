@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(as
 # Parameters
 LEVERAGE = 50
 POSITION_SIZE_PERCENT = 5  # % of wallet balance to trade per coin
-TIMEFRAME = '5m'
+TIMEFRAME = '15m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
@@ -464,7 +464,7 @@ def monitor_positions():
                 position_side = position['side']  # 'long' or 'short'
 
                 # Fetch last 14 candles for ATR calculation
-                ohlcv = exchange.fetch_ohlcv(symbol, timeframe='3m', limit=14)
+                ohlcv = exchange.fetch_ohlcv(symbol, timeframe='15m', limit=14)
 
                 # ATR calculation (Average True Range)
                 high_prices = [candle[2] for candle in ohlcv]
@@ -536,7 +536,7 @@ def monitor_positions():
                 elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.03:
                     logging.info(f"{symbol} hit -10% loss. Checking if we should close or hold.")
                     # Recheck signal on a shorter timeframe (5m)
-                    new_data = fetch_data(symbol, '3m')
+                    new_data = fetch_data(symbol, '15m')
                     if new_data is not None and not new_data.empty:
                         new_action, _ = should_trade(symbol, None, 0, new_data, fetch_wallet_balance())
 
