@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(as
 # Parameters
 LEVERAGE = 50
 POSITION_SIZE_PERCENT = 5  # % of wallet balance to trade per coin
-TIMEFRAME = '30m'
+TIMEFRAME = '15m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
@@ -692,7 +692,7 @@ def confirm_signal(symbol, action, data):
     """
     Confirms if the trading signal is consistent over two consecutive checks.
     """
-    time.sleep(5)  # Wait before re-checking the signal
+    time.sleep(120)  # Wait before re-checking the signal
     new_data = fetch_data(symbol, TIMEFRAME)
     if new_data is not None:
         new_action, _ = should_trade(symbol, None, 0, new_data, fetch_wallet_balance())
