@@ -464,7 +464,7 @@ def monitor_positions():
                 position_side = position['side']  # 'long' or 'short'
 
                 # Fetch last 14 candles for ATR calculation
-                ohlcv = exchange.fetch_ohlcv(symbol, timeframe='15m', limit=14)
+                ohlcv = exchange.fetch_ohlcv(symbol, timeframe='5m', limit=14)
 
                 # ATR calculation (Average True Range)
                 high_prices = [candle[2] for candle in ohlcv]
@@ -514,7 +514,7 @@ def monitor_positions():
                     continue  # Move to next position after closing
 
                 # 3️⃣ Full Stop-Loss at -30% → Force Close
-                if float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.10:
+                if float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.50:
                     logging.info(f"Hard stop-loss hit for {symbol}. Forcing close at -10%.")
                     close_position()
                     continue
@@ -536,7 +536,7 @@ def monitor_positions():
                 elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.03:
                     logging.info(f"{symbol} hit -10% loss. Checking if we should close or hold.")
                     # Recheck signal on a shorter timeframe (5m)
-                    new_data = fetch_data(symbol, '15m')
+                    new_data = fetch_data(symbol, '5m')
                     if new_data is not None and not new_data.empty:
                         new_action, _ = should_trade(symbol, None, 0, new_data, fetch_wallet_balance())
 
