@@ -508,7 +508,7 @@ def monitor_positions():
                             exchange.cancel_order(order['id'], symbol)
                 
                 # 1️⃣ Previous Close + Current Open with ATR Buffer → Close Position
-                if unrealized_profit >= notional_value * 0.01:  # Ensure the position is in profit
+                if unrealized_profit >= notional_value * 0.05:  # Ensure the position is in profit
                     if position_side == 'long':
                         # 1️⃣ Check for trend reversal (bearish red candle for long)
                         if prev_candle[4] > curr_candle[1]:  # Previous close > Current open
@@ -516,7 +516,7 @@ def monitor_positions():
                             close_position()
                             continue
                         # 2️⃣ Fallback: Book profit at the dynamic profit target
-                        elif unrealized_profit >= notional_value * dynamic_profit_target:
+                        elif (prev_candle[4] > (current_price + buffer) )and (unrealized_profit >= notional_value * dynamic_profit_target):
                             logging.info(f"Dynamic profit target ({dynamic_profit_target * 100}%) hit for {symbol}. Closing position as fallback.")
                             close_position()
                             continue
@@ -531,7 +531,7 @@ def monitor_positions():
                             close_position()
                             continue
                         # 2️⃣ Fallback: Book profit at the dynamic profit target
-                        elif unrealized_profit >= notional_value * dynamic_profit_target:
+                        elif (prev_candle[4] < (current_price -buffer)) and unrealized_profit >= notional_value * dynamic_profit_target:
                             logging.info(f"Dynamic profit target ({dynamic_profit_target * 100}%) hit for {symbol}. Closing position as fallback.")
                             close_position()
                             continue
