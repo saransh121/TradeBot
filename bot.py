@@ -332,7 +332,7 @@ def validate_position_size(symbol, size, current_price):
         logging.error(f"Error validating position size for {symbol}: {e}")
         return 0
 
-def confirm_trade_signal_with_atr(symbol, timeframe=TIMEFRAME, limit=14):
+def confirm_trade_signal_with_atr(symbol, timeframe='5m', limit=14):
     """
     Confirms trade signal based on ATR buffer logic using the previous close and current open price.
 
@@ -343,7 +343,7 @@ def confirm_trade_signal_with_atr(symbol, timeframe=TIMEFRAME, limit=14):
     """
     try:
         # Fetch OHLCV data
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=limit)
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
 
         # ATR calculation (Average True Range)
         high_prices = [candle[2] for candle in ohlcv]
@@ -490,7 +490,7 @@ def monitor_positions():
                 #max(atr * dynamic_multiplier, 0.0001)  # Adjust multiplier as needed (e.g., 0.5x ATR)
                 unrealized_profit = float(position['unrealizedPnl'])
                 notional_value = float(position['initialMargin'])
-                dynamic_profit_target = max(0.07, min(0.2, atr / notional_value * (LEVERAGE / 8)))
+                dynamic_profit_target = max(0.1, min(0.25, atr / notional_value * (LEVERAGE / 8)))
                 logging.info(f"dynamic profit target for the coin {symbol} is {dynamic_profit_target}")
 
                 # Function to close position and cancel stop-loss
@@ -508,15 +508,15 @@ def monitor_positions():
                             exchange.cancel_order(order['id'], symbol)
                 
                 # 1️⃣ Previous Close + Current Open with ATR Buffer → Close Position
-                if unrealized_profit >= notional_value * 0.05:  # Ensure the position is in profit
+                if unrealized_profit >= notional_value * 0.03:  # Ensure the position is in profit
                     if position_side == 'long':
                         # 1️⃣ Check for trend reversal (bearish red candle for long)
-                        if prev_candle[4] > curr_candle[1]:  # Previous close > Current open
+                        if prev_candle[4] > (current_price + buffer):  # Previous close > Current open
                             logging.info(f"Reversal detected for {symbol} (long position). Closing position.")
                             close_position()
                             continue
-                        # 2️⃣ Fallback: Book profit at the dynamic profit target
-                        elif (prev_candle[4] > (current_price + buffer) )and (unrealized_profit >= notional_value * dynamic_profit_target):
+                        #2️⃣ Fallback: Book profit at the dynamic profit target
+                        elif  (unrealized_profit >= notional_value * dynamic_profit_target):
                             logging.info(f"Dynamic profit target ({dynamic_profit_target * 100}%) hit for {symbol}. Closing position as fallback.")
                             close_position()
                             continue
@@ -526,12 +526,12 @@ def monitor_positions():
 
                     elif position_side == 'short':
                         # 1️⃣ Check for trend reversal (bullish green candle for short)
-                        if prev_candle[4] < curr_candle[1]:  # Previous close < Current open
+                        if prev_candle[4] < (current_price -buffer):  # Previous close < Current open
                             logging.info(f"Reversal detected for {symbol} (short position). Closing position.")
                             close_position()
                             continue
-                        # 2️⃣ Fallback: Book profit at the dynamic profit target
-                        elif (prev_candle[4] < (current_price -buffer)) and unrealized_profit >= notional_value * dynamic_profit_target:
+                        #2️⃣ Fallback: Book profit at the dynamic profit target
+                        elif  unrealized_profit >= notional_value * dynamic_profit_target:
                             logging.info(f"Dynamic profit target ({dynamic_profit_target * 100}%) hit for {symbol}. Closing position as fallback.")
                             close_position()
                             continue
