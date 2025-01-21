@@ -619,8 +619,8 @@ def monitor_positions():
 
 #new Trade Logic
 last_trade_time = {}
-cooldown_period = 240  # 4-minute cooldown between trades on the same symbol
-max_retries = 4
+cooldown_period = 360  # 4-minute cooldown between trades on the same symbol
+max_retries = 3
 retry_counter = {}
 
 # Main Trading Function
