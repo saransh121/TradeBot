@@ -490,7 +490,7 @@ def monitor_positions():
                 #max(atr * dynamic_multiplier, 0.0001)  # Adjust multiplier as needed (e.g., 0.5x ATR)
                 unrealized_profit = float(position['unrealizedPnl'])
                 notional_value = float(position['initialMargin'])
-                dynamic_profit_target = max(0.1, min(0.25, atr / notional_value * (LEVERAGE / 8)))
+                dynamic_profit_target = max(0.07, min(0.25, atr / notional_value * (LEVERAGE / 8)))
                 logging.info(f"dynamic profit target for the coin {symbol} is {dynamic_profit_target}")
 
                 # Function to close position and cancel stop-loss
@@ -545,7 +545,7 @@ def monitor_positions():
                     logging.info(f"Hard stop-loss hit for {symbol}. Forcing close at -10%.")
                     close_position()
                     continue
-                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.05:
+                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.2:
                     logging.info(f"{symbol} hit -20% loss. Checking if we should close or hold.")
 
                     if position_side == 'long':
@@ -560,7 +560,7 @@ def monitor_positions():
                             logging.info(f"Bullish reversal with ATR buffer detected for {symbol}. Closing short position.")
                             close_position()
                             continue
-                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.03:
+                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.1:
                     logging.info(f"{symbol} hit -10% loss. Checking if we should close or hold.")
                     # Recheck signal on a shorter timeframe (5m)
                     new_data = fetch_data(symbol, '5m')
@@ -619,8 +619,8 @@ def monitor_positions():
 
 #new Trade Logic
 last_trade_time = {}
-cooldown_period = 360  # 4-minute cooldown between trades on the same symbol
-max_retries = 3
+cooldown_period = 240  # 4-minute cooldown between trades on the same symbol
+max_retries = 4
 retry_counter = {}
 
 # Main Trading Function
@@ -692,7 +692,7 @@ def confirm_signal(symbol, action, data):
     """
     Confirms if the trading signal is consistent over two consecutive checks.
     """
-    time.sleep(120)  # Wait before re-checking the signal
+    time.sleep(10)  # Wait before re-checking the signal
     new_data = fetch_data(symbol, TIMEFRAME)
     if new_data is not None:
         new_action, _ = should_trade(symbol, None, 0, new_data, fetch_wallet_balance())
