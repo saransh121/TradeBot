@@ -26,8 +26,8 @@ exchange = ccxt.binance({
 logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Parameters
-LEVERAGE = 40
-POSITION_SIZE_PERCENT = 0.3  # % of wallet balance to trade per coin
+LEVERAGE = 20
+POSITION_SIZE_PERCENT = 0.5  # % of wallet balance to trade per coin
 TIMEFRAME = '15m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
@@ -491,7 +491,7 @@ def monitor_positions():
                 #max(atr * dynamic_multiplier, 0.0001)  # Adjust multiplier as needed (e.g., 0.5x ATR)
                 unrealized_profit = float(position['unrealizedPnl'])
                 notional_value = float(position['initialMargin'])
-                dynamic_profit_target = max(0.07, min(0.25, atr / notional_value * (LEVERAGE / 8)))
+                dynamic_profit_target = max(0.03, min(0.25, atr / notional_value * (LEVERAGE / 10)))
                 logging.info(f"dynamic profit target for the coin {symbol} is {dynamic_profit_target}")
 
                 # Function to close position and cancel stop-loss
@@ -509,7 +509,7 @@ def monitor_positions():
                             exchange.cancel_order(order['id'], symbol)
                 
                 # 1️⃣ Previous Close + Current Open with ATR Buffer → Close Position
-                if unrealized_profit >= notional_value * 0.03:  # Ensure the position is in profit
+                if unrealized_profit >= notional_value * 0.01:  # Ensure the position is in profit
                     if position_side == 'long':
                         # 1️⃣ Check for trend reversal (bearish red candle for long)
                         if prev_candle[4] > (current_price + buffer):  # Previous close > Current open
