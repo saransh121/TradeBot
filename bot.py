@@ -26,7 +26,7 @@ exchange = ccxt.binance({
 logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Parameters
-LEVERAGE = 20
+LEVERAGE = 15
 POSITION_SIZE_PERCENT = 0.5  # % of wallet balance to trade per coin
 TIMEFRAME = '15m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
