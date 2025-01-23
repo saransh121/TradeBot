@@ -260,9 +260,9 @@ def place_order(symbol, side, size):
 
         # Calculate stop price: 5% below for buy and 5% above for sell
         if side == 'buy':
-            stop_price = current_price * 0.99  # Stop-loss price 2% below current price
+            stop_price = current_price * 0.5  # Stop-loss price 2% below current price
         elif side == 'sell':
-            stop_price = current_price * 1.01  # Stop-loss price 2% above current price
+            stop_price = current_price * 1.5  # Stop-loss price 2% above current price
         else:
             raise ValueError(f"Invalid order side: {side}")
 
