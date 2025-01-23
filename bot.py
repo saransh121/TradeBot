@@ -27,7 +27,7 @@ logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(as
 
 # Parameters
 LEVERAGE = 20
-POSITION_SIZE_PERCENT = 15  # % of wallet balance to trade per coin
+POSITION_SIZE_PERCENT = 0.5  # % of wallet balance to trade per coin
 TIMEFRAME = '15m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
@@ -404,6 +404,7 @@ def should_trade(symbol, model, scaler, data, balance):
         logging.info(f"LSTM Prediction for {symbol}: {predicted_price}, Current Price: {current_price}")
 
         position_size = ((POSITION_SIZE_PERCENT) * balance) / current_price
+        position_size = position_size * LEVERAGE
         position_size = validate_position_size(symbol, position_size, current_price)
         atr = data['ATR'].iloc[-1]
         buy_threshold = 1
