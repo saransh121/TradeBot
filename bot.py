@@ -546,7 +546,7 @@ def monitor_positions():
                     logging.info(f"Hard stop-loss hit for {symbol}. Forcing close at -10%.")
                     close_position()
                     continue
-                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.2:
+                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.3:
                     logging.info(f"{symbol} hit -20% loss. Checking if we should close or hold.")
 
                     if position_side == 'long':
