@@ -561,7 +561,7 @@ def monitor_positions():
                             logging.info(f"Bullish reversal with ATR buffer detected for {symbol}. Closing short position.")
                             close_position()
                             continue
-                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.3:
+                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.4:
                     logging.info(f"{symbol} hit -10% loss. Checking if we should close or hold.")
                     # Recheck signal on a shorter timeframe (5m)
                     new_data = fetch_data(symbol, '5m')
