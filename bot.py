@@ -93,6 +93,11 @@ def add_indicators(data):
         # data['EMA_26'] = data['close'].ewm(span=26, adjust=False).mean()
         # data['MACD'] = data['EMA_12'] - data['EMA_26']
         data['Upper_Band'], data['Lower_Band'] = calculate_bollinger_bands(data['close'])
+        #'EMA_10', 'EMA_25', 'EMA_50', 'EMA_100', 'EMA_200'
+        data['EMA_10'] = data['close'].ewm(span=10, adjust=False).mean()
+        data['EMA_50'] = data['close'].ewm(span=50, adjust=False).mean()
+        data['EMA_100'] = data['close'].ewm(span=100, adjust=False).mean()
+        data['EMA_200'] = data['close'].ewm(span=200, adjust=False).mean()
         return data.dropna()
     except Exception as e:
         logging.error(f"Error adding indicators: {e}")
@@ -136,104 +141,215 @@ import logging
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
 
-def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_ema_col='EMA_99'):
-    """
-    Optimized EMA crossover detection with support, trend, breakout, wick, and volume analysis.
+# def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_ema_col='EMA_99'):
+#     """
+#     Optimized EMA crossover detection with support, trend, breakout, wick, and volume analysis.
     
-    :param data: DataFrame containing price, EMA, and volume columns.
-    :return: 'buy', 'sell', 'watch', or None.
-    """
-    if len(data) < 4:
-        return None  # Not enough data
+#     :param data: DataFrame containing price, EMA, and volume columns.
+#     :return: 'buy', 'sell', 'watch', or None.
+#     """
+#     if len(data) < 4:
+#         return None  # Not enough data
 
-    # Extract EMA values
-    short_prev, short_curr = data[short_ema_col].iloc[-2], data[short_ema_col].iloc[-1]
-    long_prev, long_curr = data[long_ema_col].iloc[-2], data[long_ema_col].iloc[-1]
-    trend_curr = data[trend_ema_col].iloc[-1]
+#     # Extract EMA values
+#     short_prev, short_curr = data[short_ema_col].iloc[-2], data[short_ema_col].iloc[-1]
+#     long_prev, long_curr = data[long_ema_col].iloc[-2], data[long_ema_col].iloc[-1]
+#     trend_curr = data[trend_ema_col].iloc[-1]
 
-    # Current and previous candle data
-    open_curr, close_curr, low_curr, high_curr = data['open'].iloc[-1], data['close'].iloc[-1], data['low'].iloc[-1], data['high'].iloc[-1]
-    close_prev = data['close'].iloc[-2]
+#     # Current and previous candle data
+#     open_curr, close_curr, low_curr, high_curr = data['open'].iloc[-1], data['close'].iloc[-1], data['low'].iloc[-1], data['high'].iloc[-1]
+#     close_prev = data['close'].iloc[-2]
 
-    # Volume data
-    volume_curr = data['volume'].iloc[-1]
-    avg_volume = data['volume'].iloc[-20:].mean()  # Average of last 20 periods
+#     # Volume data
+#     volume_curr = data['volume'].iloc[-1]
+#     avg_volume = data['volume'].iloc[-20:].mean()  # Average of last 20 periods
 
-    # EMA slopes
-    short_slope = short_curr - short_prev
-    long_slope = long_curr - long_prev
+#     # EMA slopes
+#     short_slope = short_curr - short_prev
+#     long_slope = long_curr - long_prev
 
-    # Candle characteristics
-    is_red_candle = close_curr < open_curr
-    is_green_candle = close_curr > open_curr
+#     # Candle characteristics
+#     is_red_candle = close_curr < open_curr
+#     is_green_candle = close_curr > open_curr
 
-    # Support/Resistance threshold
-    support_threshold = 0.001 * close_curr  # 0.1% buffer
+#     # Support/Resistance threshold
+#     support_threshold = 0.001 * close_curr  # 0.1% buffer
 
-    # EMA Compression threshold
-    ema_gap = abs(short_curr - long_curr)
-    compression_threshold = 0.0005 * close_curr  # 0.05% gap
+#     # EMA Compression threshold
+#     ema_gap = abs(short_curr - long_curr)
+#     compression_threshold = 0.0005 * close_curr  # 0.05% gap
 
-    # Wick sizes
-    upper_wick = high_curr - max(open_curr, close_curr)
-    lower_wick = min(open_curr, close_curr) - low_curr
+#     # Wick sizes
+#     upper_wick = high_curr - max(open_curr, close_curr)
+#     lower_wick = min(open_curr, close_curr) - low_curr
 
-    # Candle body size for momentum check
-    body_size = abs(close_curr - open_curr)
-    avg_body_size = abs(data['close'].iloc[-5:] - data['open'].iloc[-5:]).mean()
+#     # Candle body size for momentum check
+#     body_size = abs(close_curr - open_curr)
+#     avg_body_size = abs(data['close'].iloc[-5:] - data['open'].iloc[-5:]).mean()
 
-    # Volume conditions
-    is_high_volume = volume_curr > 1.1 * avg_volume  # 20% higher than average
-    is_low_volume = volume_curr < 0.9 * avg_volume   # 20% lower than average
+#     # Volume conditions
+#     is_high_volume = volume_curr > 1.1 * avg_volume  # 20% higher than average
+#     is_low_volume = volume_curr < 0.9 * avg_volume   # 20% lower than average
 
 
-    wick_body_ratio = 1.5
-    # --- Enhanced Logic with Buffer and Momentum Analysis ---
+#     wick_body_ratio = 1.5
+#     # --- Enhanced Logic with Buffer and Momentum Analysis ---
 
-    # 1. High Volume Breakout Above EMA → Strong Buy (with Buffer and Momentum)
-    if (close_prev < short_prev and close_curr > short_curr * 1.001 and close_curr > long_curr * 1.001 
-             ):
-        logging.info("High volume breakout above EMA resistance with momentum. Strong BUY signal.")
-        return 'buy'
+#     # 1. High Volume Breakout Above EMA → Strong Buy (with Buffer and Momentum)
+#     if (close_prev < short_prev and close_curr > short_curr * 1.001 and close_curr > long_curr * 1.001 
+#              ):
+#         logging.info("High volume breakout above EMA resistance with momentum. Strong BUY signal.")
+#         return 'buy'
 
-    # 2. High Volume Breakdown Below EMA → Strong Sell (with Buffer and Momentum)
-    if (close_prev > short_prev and close_curr < short_curr * 0.999 and close_curr < long_curr * 0.999 
-             ):
-        logging.info("High volume breakdown below EMA support with momentum. Strong SELL signal.")
-        return 'sell'
+#     # 2. High Volume Breakdown Below EMA → Strong Sell (with Buffer and Momentum)
+#     if (close_prev > short_prev and close_curr < short_curr * 0.999 and close_curr < long_curr * 0.999 
+#              ):
+#         logging.info("High volume breakdown below EMA support with momentum. Strong SELL signal.")
+#         return 'sell'
 
-    # 3. Low Volume Breakout → Ignore Signal
-    if (close_prev < short_prev and close_curr > short_curr) and is_high_volume and is_green_candle:
-        logging.info("Green Candle after potential breakout")
-        return 'watch'
+#     # 3. Low Volume Breakout → Ignore Signal
+#     if (close_prev < short_prev and close_curr > short_curr) and is_high_volume and is_green_candle:
+#         logging.info("Green Candle after potential breakout")
+#         return 'watch'
     
-    if (close_prev > short_prev and close_curr < short_curr)  and is_high_volume and is_red_candle:
-        logging.info("Red Candle after potential breakdown")
-        return 'watch'
+#     if (close_prev > short_prev and close_curr < short_curr)  and is_high_volume and is_red_candle:
+#         logging.info("Red Candle after potential breakdown")
+#         return 'watch'
 
-    # 4. EMA Compression (Squeeze) → Trend Reversal Alert
-    if ema_gap <= compression_threshold:
-        logging.info("EMA compression detected. Potential breakout or reversal ahead. Signal: WATCH")
-        return 'watch'
+#     # 4. EMA Compression (Squeeze) → Trend Reversal Alert
+#     if ema_gap <= compression_threshold:
+#         logging.info("EMA compression detected. Potential breakout or reversal ahead. Signal: WATCH")
+#         return 'watch'
 
-    # 5. Long Lower Wick Near EMA + High Volume → Buy Signal
-    if (lower_wick > wick_body_ratio * body_size and  # Wick is 1.5x the body
-            abs(low_curr - short_curr) <= support_threshold and  # Close to EMA support
-              # Bullish candle
-            short_slope > 0 and long_slope > 0 and  # EMAs trending upward
-            is_high_volume):  # Confirmed by high volume
-        logging.info("Long lower wick near EMA with high volume and upward trend. Strong BUY signal.")
-        return 'buy'
+#     # 5. Long Lower Wick Near EMA + High Volume → Buy Signal
+#     if (lower_wick > wick_body_ratio * body_size and  # Wick is 1.5x the body
+#             abs(low_curr - short_curr) <= support_threshold and  # Close to EMA support
+#               # Bullish candle
+#             short_slope > 0 and long_slope > 0 and  # EMAs trending upward
+#             is_high_volume):  # Confirmed by high volume
+#         logging.info("Long lower wick near EMA with high volume and upward trend. Strong BUY signal.")
+#         return 'buy'
 
-    # 6. Long Upper Wick Near EMA + High Volume → Sell Signal
-    if (upper_wick > wick_body_ratio * body_size and  # Wick is 1.5x the body
-            abs(high_curr - short_curr) <= support_threshold and  # Close to EMA resistance
-            short_slope < 0 and long_slope < 0 and  # EMAs trending downward
-            (is_high_volume or not is_low_volume)):  # Volume is high or average
-        logging.info("Long upper wick near EMA with volume confirmation and downward trend. Strong SELL signal.")
-        return 'sell'
+#     # 6. Long Upper Wick Near EMA + High Volume → Sell Signal
+#     if (upper_wick > wick_body_ratio * body_size and  # Wick is 1.5x the body
+#             abs(high_curr - short_curr) <= support_threshold and  # Close to EMA resistance
+#             short_slope < 0 and long_slope < 0 and  # EMAs trending downward
+#             (is_high_volume or not is_low_volume)):  # Volume is high or average
+#         logging.info("Long upper wick near EMA with volume confirmation and downward trend. Strong SELL signal.")
+#         return 'sell'
 
-    return None
+#     return None
+
+
+# new detect cross over logic
+def detect_crossover(data):
+    """
+    Enhanced EMA Strategy with detailed debugging:
+    - Double Moving Average Crossover
+    - Golden Cross Strategy
+    - Exponential Moving Average (EMA) Crossover
+    - Triple Moving Average Crossover
+    - Moving Average Ribbon
+    - Pullback to EMA Strategy
+    - EMA Dynamic Zone Strategy
+    - EMA Breakout Strategy
+    :param data: DataFrame containing EMA columns and price data.
+    :return: 'buy', 'sell', or None.
+    """
+    try:
+        # Extract EMA columns
+        short_ema_1, long_ema_1 = 'EMA_10', 'EMA_50'  # For Double Moving Average Crossover
+        short_ema_2, long_ema_2 = 'EMA_50', 'EMA_200'  # For Golden Cross Strategy
+        triple_ema_short, triple_ema_mid, triple_ema_long = 'EMA_10', 'EMA_25', 'EMA_50'  # For Triple Crossover
+        ema_columns = ['EMA_10', 'EMA_25', 'EMA_50', 'EMA_100', 'EMA_200']  # For Moving Average Ribbon
+
+        # Extract latest values for all EMA columns
+        short_ema_1_prev, short_ema_1_curr = data[short_ema_1].iloc[-2], data[short_ema_1].iloc[-1]
+        long_ema_1_prev, long_ema_1_curr = data[long_ema_1].iloc[-2], data[long_ema_1].iloc[-1]
+
+        short_ema_2_prev, short_ema_2_curr = data[short_ema_2].iloc[-2], data[short_ema_2].iloc[-1]
+        long_ema_2_prev, long_ema_2_curr = data[long_ema_2].iloc[-2], data[long_ema_2].iloc[-1]
+
+        triple_ema_short_prev, triple_ema_short_curr = data[triple_ema_short].iloc[-2], data[triple_ema_short].iloc[-1]
+        triple_ema_mid_prev, triple_ema_mid_curr = data[triple_ema_mid].iloc[-2], data[triple_ema_mid].iloc[-1]
+        triple_ema_long_prev, triple_ema_long_curr = data[triple_ema_long].iloc[-2], data[triple_ema_long].iloc[-1]
+
+        close_prev, close_curr = data['close'].iloc[-2], data['close'].iloc[-1]
+
+      
+
+        # --- 1. Double Moving Average Crossover ---
+        if short_ema_1_prev <= long_ema_1_prev and short_ema_1_curr > long_ema_1_curr:
+            logging.info("Condition: Double Moving Average Crossover → BUY signal.")
+            return 'buy'
+        elif short_ema_1_prev >= long_ema_1_prev and short_ema_1_curr < long_ema_1_curr:
+            logging.info("Condition: Double Moving Average Crossover → SELL signal.")
+            return 'sell'
+
+        # --- 2. Golden Cross Strategy ---
+        elif short_ema_2_prev <= long_ema_2_prev and short_ema_2_curr > long_ema_2_curr:
+            logging.info("Condition: Golden Cross Strategy → BUY signal.")
+            return 'buy'
+        elif short_ema_2_prev >= long_ema_2_prev and short_ema_2_curr < long_ema_2_curr:
+            logging.info("Condition: Golden Cross Strategy → SELL signal.")
+            return 'sell'
+
+        # --- 3. Triple Moving Average Crossover ---
+        elif (
+            triple_ema_short_prev <= triple_ema_mid_prev <= triple_ema_long_prev and
+            triple_ema_short_curr > triple_ema_mid_curr > triple_ema_long_curr
+        ):
+            logging.info("Condition: Triple EMA Crossover → BUY signal.")
+            return 'buy'
+        elif (
+            triple_ema_short_prev >= triple_ema_mid_prev >= triple_ema_long_prev and
+            triple_ema_short_curr < triple_ema_mid_curr < triple_ema_long_curr
+        ):
+            logging.info("Condition: Triple EMA Crossover → SELL signal.")
+            return 'sell'
+
+        # --- 4. Moving Average Ribbon ---
+        ema_stack = data[ema_columns].iloc[-1]
+        if ema_stack.is_monotonic_increasing:  # All EMAs are trending upward
+            logging.info("Condition: Moving Average Ribbon → BUY signal.")
+            return 'buy'
+        elif ema_stack.is_monotonic_decreasing:  # All EMAs are trending downward
+            logging.info("Condition: Moving Average Ribbon → SELL signal.")
+            return 'sell'
+
+        # --- 5. Pullback to EMA Strategy ---
+        elif abs(close_curr - long_ema_1_curr) <= 0.002 * close_curr:  # Within 0.2% of EMA_50
+            if close_curr > long_ema_1_curr and close_prev < long_ema_1_prev:  # Bullish bounce
+                logging.info("Condition: Pullback to EMA_50 → BUY signal.")
+                return 'buy'
+            elif close_curr < long_ema_1_curr and close_prev > long_ema_1_prev:  # Bearish rejection
+                logging.info("Condition: Pullback to EMA_50 → SELL signal.")
+                return 'sell'
+
+        # --- 6. EMA Dynamic Zone Strategy ---
+        elif close_curr > max(ema_stack):  # Above all EMAs
+            logging.info("Condition: EMA Dynamic Zone → BUY signal.")
+            return 'buy'
+        elif close_curr < min(ema_stack):  # Below all EMAs
+            logging.info("Condition: EMA Dynamic Zone → SELL signal.")
+            return 'sell'
+
+        # --- 7. EMA Breakout Strategy ---
+        elif close_prev < long_ema_2_prev and close_curr > long_ema_2_curr:  # Breakout above EMA_200
+            logging.info("Condition: EMA Breakout → BUY signal.")
+            return 'buy'
+        elif close_prev > long_ema_2_prev and close_curr < long_ema_2_curr:  # Breakout below EMA_200
+            logging.info("Condition: EMA Breakout → SELL signal.")
+            return 'sell'
+
+        # If no conditions met
+        logging.info("No conditions met for BUY or SELL.")
+        return None
+
+    except Exception as e:
+        logging.error(f"Error in enhanced EMA strategy: {e}")
+        return None
+
 
 
 
