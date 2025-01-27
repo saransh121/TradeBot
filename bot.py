@@ -722,7 +722,7 @@ def monitor_positions():
                             exchange.cancel_order(order['id'], symbol)
                 
                 # 1️⃣ Previous Close + Current Open with ATR Buffer → Close Position
-                if unrealized_profit >= notional_value * 0.01:  # Ensure the position is in profit
+                if unrealized_profit >= notional_value * 0.025:  # Ensure the position is in profit
                     if position_side == 'long':
                         # 1️⃣ Check for trend reversal (bearish red candle for long)
                         if prev_candle[4] > (current_price + buffer):  # Previous close > Current open
