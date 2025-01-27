@@ -497,6 +497,93 @@ def confirm_trade_signal_with_atr(symbol, timeframe='5m', limit=14):
         return None
 
 
+#new support resitance 
+def support_resistance_signal(symbol, exchange=exchange, timeframe='15m', buffer=0.002, min_swing_distance=5):
+    """
+    Generates buy/sell signals based on support and resistance levels.
+    
+    :param symbol: The trading pair (e.g., 'DOGE/USDT').
+    :param exchange: The exchange object (e.g., ccxt.binance instance).
+    :param timeframe: The timeframe for the data (default: '5m').
+    :param buffer: Buffer percentage to treat levels as zones (default: 0.2%).
+    :param min_swing_distance: Minimum distance between swing points to avoid noise.
+    :return: 'buy', 'sell', or None.
+    """
+    try:
+        # Fetch OHLCV data
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=100)
+        data = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        data['timestamp'] = pd.to_datetime(data['timestamp'], unit='ms')
+
+        # Identify recent swing highs and lows (with a minimum distance filter)
+        data['Swing_High'] = data['high'][
+            (data['high'] > data['high'].shift(1)) & 
+            (data['high'] > data['high'].shift(-1))
+        ]
+        data['Swing_Low'] = data['low'][
+            (data['low'] < data['low'].shift(1)) & 
+            (data['low'] < data['low'].shift(-1))
+        ]
+
+        # Filter out swings that are too close (to avoid noise)
+        recent_swing_highs = data['Swing_High'].dropna().iloc[-min_swing_distance:]
+        recent_swing_lows = data['Swing_Low'].dropna().iloc[-min_swing_distance:]
+
+        # Get the most recent swing high and low
+        recent_resistance = recent_swing_highs.max() if not recent_swing_highs.empty else None
+        recent_support = recent_swing_lows.min() if not recent_swing_lows.empty else None
+
+        if recent_resistance is None or recent_support is None:
+            logging.info(f"{symbol}: No valid support or resistance levels identified.")
+            return None
+
+        # Apply buffer zones around support and resistance
+        resistance_zone = (
+            recent_resistance - buffer * recent_resistance, 
+            recent_resistance + buffer * recent_resistance
+        )
+        support_zone = (
+            recent_support - buffer * recent_support, 
+            recent_support + buffer * recent_support
+        )
+        
+        
+        # Fetch current price
+        current_price = data['close'].iloc[-1]
+        previous_price = data['close'].iloc[-2]
+
+
+        # --- Buy Signal: Price near support and bouncing ---
+        if support_zone[0] <= current_price <= support_zone[1]:
+              # Bullish momentum
+                logging.info(f"{symbol}: Buy signal detected. Price near support zone {support_zone}.")
+                return 'buy'
+
+        # --- Sell Signal: Price near resistance and rejecting ---
+        if resistance_zone[0] <= current_price <= resistance_zone[1]:
+             # Bearish momentum
+                logging.info(f"{symbol}: Sell signal detected. Price near resistance zone {resistance_zone}.")
+                return 'sell'
+
+        # --- Breakout Buy Signal: Price breaks above resistance ---
+        if current_price > resistance_zone[1] and previous_price <= resistance_zone[1]:
+            logging.info(f"{symbol}: Breakout Buy signal detected. Price broke above resistance zone {resistance_zone}.")
+            return 'buy'
+
+        # --- Breakout Sell Signal: Price breaks below support ---
+        if current_price < support_zone[0] and previous_price >= support_zone[0]:
+            logging.info(f"{symbol}: Breakout Sell signal detected. Price broke below support zone {support_zone}.")
+            return 'sell'
+
+        # Default: No signal
+        logging.info(f"{symbol}: No significant support-resistance signal generated.")
+        return None
+
+    except Exception as e:
+        logging.error(f"Error in support_resistance_signal for {symbol}: {e}")
+        return None
+
+
 # Determine Trade Signal
 def should_trade(symbol, model, scaler, data, balance):
     try:
@@ -535,8 +622,13 @@ def should_trade(symbol, model, scaler, data, balance):
         logging.info(f"cross over signal {crossover_signal}")
         # Remove the proximity condition for buy and sell
         # Buy Condition
-        if ((crossover_signal == 'buy' )
+        if ((crossover_signal == 'buy' 
             and confirm_trade_signal_with_atr(symbol=symbol) == 'buy'
+            and (30 < data['RSI'].iloc[-1] < 50)
+            )
+            or (support_resistance_signal(symbol) == 'buy'
+                and confirm_trade_signal_with_atr(symbol=symbol) == 'buy'
+            )
            #   (predicted_price > (current_price * buy_threshold))
             #   and (crossover_signal == 'buy' ))
                 
@@ -548,8 +640,13 @@ def should_trade(symbol, model, scaler, data, balance):
             return 'buy', position_size
 
         # Sell Condition
-        elif ((crossover_signal == 'sell' )
+        elif ((crossover_signal == 'sell' 
               and confirm_trade_signal_with_atr(symbol=symbol) == 'sell'
+              and (data['RSI'].iloc[-1] > 65)
+              )
+               or (support_resistance_signal(symbol) == 'sell'
+                and confirm_trade_signal_with_atr(symbol=symbol) == 'sell'
+            )
             #(predicted_price < (current_price * sell_threshold))
             #     and (crossover_signal == 'sell' ))
                 #  or ((data['MA_10'].iloc[-1] < data['MA_30'].iloc[-1]) 
