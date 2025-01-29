@@ -567,12 +567,12 @@ def support_resistance_signal(symbol, exchange=exchange, timeframe='15m', buffer
 
         # --- Breakout Buy Signal: Price breaks above resistance ---
         if current_price > resistance_zone[1] and previous_price <= resistance_zone[1]:
-            logging.info(f"{symbol}: Breakout Buy signal detected. Price broke above resistance zone {resistance_zone}.")
+            logging.info(f"{symbol}:  Buy signal detected. Price broke above resistance zone {resistance_zone}.")
             return 'buy'
 
         # --- Breakout Sell Signal: Price breaks below support ---
         if current_price < support_zone[0] and previous_price >= support_zone[0]:
-            logging.info(f"{symbol}: Breakout Sell signal detected. Price broke below support zone {support_zone}.")
+            logging.info(f"{symbol}:  Sell signal detected. Price broke below support zone {support_zone}.")
             return 'sell'
 
         # Default: No signal
@@ -584,7 +584,7 @@ def support_resistance_signal(symbol, exchange=exchange, timeframe='15m', buffer
         return None
 
 # all break out patterns
-def detect_breakout_patterns(data):
+def detect_breakout_patterns(symbol, exchange=exchange, timeframe='1h'):
     """
     Detects breakout patterns based on price and EMA levels. Includes:
     - Horizontal Breakout
@@ -601,6 +601,9 @@ def detect_breakout_patterns(data):
     :return: 'buy', 'sell', or None.
     """
     try:
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=300)
+        data = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        data['timestamp'] = pd.to_datetime(data['timestamp'], unit='ms')
         # Extract relevant price points
         high = data['high']
         low = data['low']
@@ -608,12 +611,11 @@ def detect_breakout_patterns(data):
         open_price = data['open']
 
         # Extract EMA levels
-        ema_50 = data['EMA_50']
-        ema_200 = data['EMA_200']
+        
 
         # Define key support and resistance
-        recent_high = high.iloc[-14:].max()  # Recent resistance (last 14 candles)
-        recent_low = low.iloc[-14:].min()  # Recent support (last 14 candles)
+        recent_high = high.iloc[-42:].max()  # Recent resistance (last 14 candles)
+        recent_low = low.iloc[-42:].min()  # Recent support (last 14 candles)
         current_price = close.iloc[-1]
         previous_price = close.iloc[-2]
 
@@ -625,13 +627,13 @@ def detect_breakout_patterns(data):
         resistance_zone = (recent_high - buffer, recent_high + buffer)
         support_zone = (recent_low - buffer, recent_low + buffer)
 
-        # --- 1. Horizontal Breakout ---
-        if current_price > resistance_zone[1]:
-            logging.info("Horizontal Breakout: BUY signal detected.")
-            return 'buy'
-        if current_price < support_zone[0]:
-            logging.info("Horizontal Breakout: SELL signal detected.")
-            return 'sell'
+        # # --- 1. Horizontal Breakout ---
+        # if current_price > resistance_zone[1]:
+        #     logging.info("Horizontal Breakout: BUY signal detected.")
+        #     return 'buy'
+        # if current_price < support_zone[0]:
+        #     logging.info("Horizontal Breakout: SELL signal detected.")
+        #     return 'sell'
 
         # --- 2. Trendline Breakout ---
         # Uptrend breakout: Higher lows with breakout above recent high
@@ -724,7 +726,7 @@ def should_trade(symbol, model, scaler, data, balance):
         #0.998 - (atr / current_price * 0.005)
 
         crossover_signal = detect_crossover(data)
-        pattern_breakout = detect_breakout_patterns(data=data)
+        pattern_breakout = detect_breakout_patterns(symbol=symbol)
         logging.info(f"Trade conditions for {symbol} - Predicted: {predicted_price}, Current: {current_price}, MA_10: {data['MA_10'].iloc[-1]}, MA_30: {data['MA_30'].iloc[-1]}, RSI: {data['RSI'].iloc[-1]} , MACD : {data['MACD'].iloc[-1]}, Signal {data['Signal'].iloc[-1]} , ATR Confimation {confirm_trade_signal_with_atr(symbol=symbol)}")
         logging.info(f"buy threshold {buy_threshold} - sell threshold {sell_threshold}")
         logging.info(f"cross over signal {crossover_signal}")
@@ -742,6 +744,7 @@ def should_trade(symbol, model, scaler, data, balance):
             or
             (pattern_breakout == 'buy'
                and confirm_trade_signal_with_atr(symbol=symbol) == 'buy'
+               
                )
             and (data['MACD'].iloc[-1] > 0)
         ):
@@ -758,6 +761,7 @@ def should_trade(symbol, model, scaler, data, balance):
             )
             or (pattern_breakout == 'sell'
                and confirm_trade_signal_with_atr(symbol=symbol) == 'sell'
+               
                )
             #(predicted_price < (current_price * sell_threshold))
             #     and (crossover_signal == 'sell' ))
