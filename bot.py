@@ -564,7 +564,7 @@ def support_resistance_signal(symbol, exchange=exchange, timeframe='15m', buffer
              # Bearish momentum
                 logging.info(f"{symbol}: Sell signal detected. Price near resistance zone {resistance_zone}.")
                 return 'sell'
-
+        
         # --- Breakout Buy Signal: Price breaks above resistance ---
         if current_price > resistance_zone[1] and previous_price <= resistance_zone[1]:
             logging.info(f"{symbol}:  Buy signal detected. Price broke above resistance zone {resistance_zone}.")
@@ -744,6 +744,7 @@ def should_trade(symbol, model, scaler, data, balance):
             or
             (pattern_breakout == 'buy'
                and confirm_trade_signal_with_atr(symbol=symbol) == 'buy'
+               and (30 < data['RSI'].iloc[-1] < 50)
                
                )
             and (data['MACD'].iloc[-1] > 0)
@@ -761,6 +762,7 @@ def should_trade(symbol, model, scaler, data, balance):
             )
             or (pattern_breakout == 'sell'
                and confirm_trade_signal_with_atr(symbol=symbol) == 'sell'
+               and (data['RSI'].iloc[-1] > 65)
                
                )
             #(predicted_price < (current_price * sell_threshold))
