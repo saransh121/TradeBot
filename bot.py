@@ -499,7 +499,7 @@ def calculate_ema(data: pd.Series, period: int) -> pd.Series:
 def support_resistance_signal_new(
     symbol: str,
     exchange= exchange,
-    timeframe: str = '15m',
+    timeframe: str = '30m',
     min_swing_distance: int = 5,
     atr_multiplier: float = 1,
     volume_threshold: float = 1.8
