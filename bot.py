@@ -633,7 +633,7 @@ def support_resistance_signal_new(
 
 
 # all break out patterns
-def detect_breakout_patterns(symbol: str, exchange: ccxt.Exchange = exchange, timeframe: str = '30m', 
+def detect_breakout_patterns(symbol: str, exchange: ccxt.Exchange = exchange, timeframe: str = '1h', 
                             confirmation_candles: int = 3, min_pattern_length: int = 10):
     """
     Enhanced breakout pattern detection with:
