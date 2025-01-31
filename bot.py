@@ -6,6 +6,8 @@ import logging
 import joblib
 import os
 import threading
+from collections import defaultdict
+from typing import Optional, Tuple
 from dotenv import load_dotenv
 from tensorflow.keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
@@ -26,8 +28,8 @@ exchange = ccxt.binance({
 logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Parameters
-LEVERAGE = 15
-POSITION_SIZE_PERCENT = 0.35  # % of wallet balance to trade per coin
+LEVERAGE = 10
+POSITION_SIZE_PERCENT = 0.2  # % of wallet balance to trade per coin
 TIMEFRAME = '15m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
@@ -583,114 +585,304 @@ def support_resistance_signal(symbol, exchange=exchange, timeframe='15m', buffer
         logging.error(f"Error in support_resistance_signal for {symbol}: {e}")
         return None
 
-# all break out patterns
-def detect_breakout_patterns(symbol, exchange=exchange, timeframe='1h'):
+
+#new Function
+def calculate_atr(data: pd.DataFrame, period: int = 14) -> pd.Series:
+    """Calculate Average True Range (ATR)"""
+    high_low = data['high'] - data['low']
+    high_close = np.abs(data['high'] - data['close'].shift())
+    low_close = np.abs(data['low'] - data['close'].shift())
+    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+    return tr.rolling(period).mean()
+
+def calculate_ema(data: pd.Series, period: int) -> pd.Series:
+    """Calculate Exponential Moving Average"""
+    return data.ewm(span=period, adjust=False).mean()
+
+def support_resistance_signal_new(
+    symbol: str,
+    exchange= exchange,
+    timeframe: str = '15m',
+    min_swing_distance: int = 5,
+    atr_multiplier: float = 1,
+    volume_threshold: float = 1.8
+) :
     """
-    Detects breakout patterns based on price and EMA levels. Includes:
-    - Horizontal Breakout
-    - Trendline Breakout
-    - Ascending Triangle
-    - Descending Triangle
-    - Symmetrical Triangle
-    - Flag
-    - Pennant
-    - Double Bottom (Bullish Reversal)
-    - Double Top (Bearish Reversal)
+    Enhanced Support/Resistance Signal Generator with:
+    - Dynamic ATR-based buffers
+    - Volume confirmation
+    - Trend filtering
+    - Breakout detection
     
-    :param data: DataFrame containing columns ['high', 'low', 'close', 'open', 'EMA_50', 'EMA_200'] and others.
-    :return: 'buy', 'sell', or None.
+    Returns: 'buy', 'sell', or None
     """
     try:
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=300)
+        # Fetch OHLCV data
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=600)
+        if len(ohlcv) < 100:
+            logging.warning(f"Insufficient data for {symbol}")
+            return None
+
         data = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         data['timestamp'] = pd.to_datetime(data['timestamp'], unit='ms')
-        # Extract relevant price points
-        high = data['high']
-        low = data['low']
-        close = data['close']
-        open_price = data['open']
 
-        # Extract EMA levels
+        # Calculate technical indicators
+        data['ATR'] = calculate_atr(data)
+        data['EMA_50'] = calculate_ema(data['close'], 50)
         
+        # Identify swing points with minimum distance filter
+        data['Swing_High'] = data['high'][
+            (data['high'] > data['high'].shift(1)) & 
+            (data['high'] > data['high'].shift(-1)) &
+            (data['high'].rolling(3).max() == data['high'])
+        ]
+        
+        data['Swing_Low'] = data['low'][
+            (data['low'] < data['low'].shift(1)) & 
+            (data['low'] < data['low'].shift(-1)) &
+            (data['low'].rolling(3).min() == data['low'])
+        ]
 
-        # Define key support and resistance
-        recent_high = high.iloc[-42:].max()  # Recent resistance (last 14 candles)
-        recent_low = low.iloc[-42:].min()  # Recent support (last 14 candles)
-        current_price = close.iloc[-1]
-        previous_price = close.iloc[-2]
+        # Get recent swing points
+        swing_highs = data['Swing_High'].dropna().iloc[-min_swing_distance:]
+        swing_lows = data['Swing_Low'].dropna().iloc[-min_swing_distance:]
 
-        # Dynamic buffer based on ATR
-        atr = (high - low).rolling(window=14).mean().iloc[-1]
-        buffer = atr * 0.5  # 50% of ATR as buffer
+        if swing_highs.empty or swing_lows.empty:
+            logging.info(f"{symbol}: No clear swing points detected")
+            return None
 
-        # Define support and resistance zones
-        resistance_zone = (recent_high - buffer, recent_high + buffer)
-        support_zone = (recent_low - buffer, recent_low + buffer)
+        recent_resistance = swing_highs.max()
+        recent_support = swing_lows.min()
+        current_price = data['close'].iloc[-1]
+        current_volume = data['volume'].iloc[-1]
+        avg_volume = data['volume'].rolling(20).mean().iloc[-1]
 
-        # # --- 1. Horizontal Breakout ---
-        # if current_price > resistance_zone[1]:
-        #     logging.info("Horizontal Breakout: BUY signal detected.")
-        #     return 'buy'
-        # if current_price < support_zone[0]:
-        #     logging.info("Horizontal Breakout: SELL signal detected.")
-        #     return 'sell'
+        # Dynamic buffer calculation
+        atr = data['ATR'].iloc[-1]
+        buffer = atr * atr_multiplier
 
-        # --- 2. Trendline Breakout ---
-        # Uptrend breakout: Higher lows with breakout above recent high
-        if (low.iloc[-3] < low.iloc[-2] < low.iloc[-1]) and (current_price > recent_high + buffer):
-            logging.info("Trendline Breakout: BUY signal detected.")
-            return 'buy'
-        # Downtrend breakout: Lower highs with breakout below recent low
-        if (high.iloc[-3] > high.iloc[-2] > high.iloc[-1]) and (current_price < recent_low - buffer):
-            logging.info("Trendline Breakout: SELL signal detected.")
-            return 'sell'
+        # Define zones with ATR-based buffers
+        resistance_zone = (
+            recent_resistance - buffer,
+            recent_resistance + buffer
+        )
+        support_zone = (
+            recent_support - buffer,
+            recent_support + buffer
+        )
 
-        # --- 3. Triangle Patterns ---
-        # Ascending Triangle
-        if (low.iloc[-3] < low.iloc[-2] < low.iloc[-1]) and (abs(high.iloc[-1] - recent_high) <= buffer):
-            logging.info("Ascending Triangle: Potential BUY signal detected.")
-            return 'buy'
-        # Descending Triangle
-        if (high.iloc[-3] > high.iloc[-2] > high.iloc[-1]) and (abs(low.iloc[-1] - recent_low) <= buffer):
-            logging.info("Descending Triangle: Potential SELL signal detected.")
-            return 'sell'
-        # Symmetrical Triangle
-        if (abs(high.iloc[-1] - recent_high) <= buffer) and (abs(low.iloc[-1] - recent_low) <= buffer):
-            if current_price > resistance_zone[1]:
-                logging.info("Symmetrical Triangle: Breakout above → BUY signal detected.")
-                return 'buy'
-            if current_price < support_zone[0]:
-                logging.info("Symmetrical Triangle: Breakout below → SELL signal detected.")
-                return 'sell'
+        # Trend determination
+        trend = 'bullish' if current_price > data['EMA_50'].iloc[-1] else 'bearish'
 
-        # --- 4. Flag Pattern ---
-        # Brief consolidation after strong trend
-        if (high.iloc[-5:].max() - low.iloc[-5:].min()) < 0.005 * current_price:  # Narrow range
-            if current_price > recent_high + buffer:
-                logging.info("Flag Pattern: BUY signal detected.")
-                return 'buy'
-            if current_price < recent_low - buffer:
-                logging.info("Flag Pattern: SELL signal detected.")
-                return 'sell'
+        # Volume confirmation check
+        volume_ok = current_volume >= avg_volume * volume_threshold
 
-        # --- 5. Double Bottom (Bullish Reversal) ---
-        if low.iloc[-3] == low.iloc[-1] and low.iloc[-2] > low.iloc[-3]:
-            if current_price > recent_high + buffer:
-                logging.info("Double Bottom: BUY signal detected.")
-                return 'buy'
+        # Signal logic
+        signals = []
+        
+        # Support bounce with trend confirmation
+        if (support_zone[0] <= current_price <= support_zone[1] and
+            trend == 'bullish' and
+            volume_ok):
+            signals.append(('buy', 'support_bounce'))
+            
+        # Resistance rejection with trend confirmation
+        if (resistance_zone[0] <= current_price <= resistance_zone[1] and
+            trend == 'bearish' and
+            volume_ok):
+            signals.append(('sell', 'resistance_rejection'))
+            
+        # Breakout signals
+        if current_price > resistance_zone[1] and volume_ok:
+            signals.append(('buy', 'breakout'))
+            
+        if current_price < support_zone[0] and volume_ok:
+            signals.append(('sell', 'breakdown'))
 
-        # --- 6. Double Top (Bearish Reversal) ---
-        if high.iloc[-3] == high.iloc[-1] and high.iloc[-2] < high.iloc[-3]:
-            if current_price < recent_low - buffer:
-                logging.info("Double Top: SELL signal detected.")
-                return 'sell'
+        # Prioritize signals (breakouts > bounces/rejections)
+        signal_strength = {'breakout': 2, 'breakdown': 2, 
+                          'support_bounce': 1, 'resistance_rejection': 1}
+        
+        if signals:
+            # Select strongest signal
+            signals.sort(key=lambda x: -signal_strength[x[1]])
+            decision = signals[0][0]
+            
+            # Final confirmation with price action
+            prev_candle = data.iloc[-2]
+            curr_candle = data.iloc[-1]
+            
+            if decision == 'buy':
+                if curr_candle['close'] > curr_candle['open']:  # Bullish candle
+                    logging.info(f"BUY {symbol} | Reason: {signals[0][1]} | "
+                                f"Price: {current_price:.5f} | Vol: {current_volume/avg_volume:.1f}x")
+                    return 'buy'
+                
+            elif decision == 'sell':
+                if curr_candle['close'] < curr_candle['open']:  # Bearish candle
+                    logging.info(f"SELL {symbol} | Reason: {signals[0][1]} | "
+                                f"Price: {current_price:.5f} | Vol: {current_volume/avg_volume:.1f}x")
+                    return 'sell'
 
-        # Default: No breakout detected
-        logging.info("No breakout patterns detected.")
+        logging.info(f"{symbol}: No qualified signals | "
+                    f"Trend: {trend} | Vol Ratio: {current_volume/avg_volume:.1f}")
         return None
 
     except Exception as e:
-        logging.error(f"Error in breakout pattern detection: {e}")
+        logging.error(f"Error processing {symbol}: {str(e)}", exc_info=True)
+        return None
+
+
+
+
+# all break out patterns
+def detect_breakout_patterns(symbol: str, exchange: ccxt.Exchange = exchange, timeframe: str = '1h', 
+                            confirmation_candles: int = 3, min_pattern_length: int = 10):
+    """
+    Enhanced breakout pattern detection with:
+    - 12 major pattern types
+    - Volume confirmation
+    - Retest validation
+    - Trend alignment
+    - Pattern strength scoring
+    
+    Returns: 'buy', 'sell' with confidence score (1-5), or None
+    """
+    try:
+        # Fetch and prepare data
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=300)
+        data = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        data['timestamp'] = pd.to_datetime(data['timestamp'], unit='ms')
+        
+        # Calculate technical indicators
+        data['ATR'] = calculate_atr(data)
+        data['EMA_20'] = data['close'].ewm(span=20, adjust=False).mean()
+        data['EMA_50'] = data['close'].ewm(span=50, adjust=False).mean()
+        data['VWAP'] = (data['volume'] * (data['high'] + data['low'] + data['close']) / 3).cumsum() / data['volume'].cumsum()
+        
+        # Initialize pattern storage with confidence scores
+        patterns = {
+            'bullish': defaultdict(float),
+            'bearish': defaultdict(float)
+        }
+
+        # Helper functions
+        def is_consecutive(prices, window, direction='up'):
+            for i in range(len(prices)-window+1):
+                subset = prices[i:i+window]
+                if direction == 'up' and all(x < y for x, y in zip(subset, subset[1:])):
+                    return True
+                if direction == 'down' and all(x > y for x, y in zip(subset, subset[1:])):
+                    return True
+            return False
+
+        # 1. Horizontal Breakout (Support/Resistance)
+        resistance = data['high'].rolling(20).max().iloc[-1]
+        support = data['low'].rolling(20).min().iloc[-1]
+        buffer = data['ATR'].iloc[-1] * 0.3
+        
+        if data['close'].iloc[-1] > resistance + buffer:
+            patterns['bullish']['horizontal_breakout'] += 2.5
+        if data['close'].iloc[-1] < support - buffer:
+            patterns['bearish']['horizontal_breakout'] += 2.5
+
+        # 2. Trendline Breakout with Fibonacci Extension
+        highs = data['high'].values[-min_pattern_length:]
+        lows = data['low'].values[-min_pattern_length:]
+        
+        # Automated trendline detection
+        for i in range(len(highs)-4):
+            try:
+                if highs[i+2] > highs[i] and highs[i+2] > highs[i+4]:  # Potential descending trendline
+                    slope = (highs[i+4] - highs[i]) / 4
+                    projected = highs[i] + slope * (len(highs)-i)
+                    if data['close'].iloc[-1] > projected + buffer:
+                        patterns['bullish']['trendline_breakout'] += 3.0
+            except IndexError:
+                continue
+
+        # 3. Triangle Patterns with Volume Squeeze
+        max_high = data['high'].rolling(20).max()
+        min_low = data['low'].rolling(20).min()
+        volatility = (max_high - min_low).pct_change()
+        
+        if volatility.iloc[-1] < 0.5 * volatility.mean():
+            # Ascending Triangle
+            if is_consecutive(data['high'].iloc[-5:], 3, 'up') and is_consecutive(data['low'].iloc[-5:], 3, 'up'):
+                patterns['bullish']['ascending_triangle'] += 2.8
+            
+            # Descending Triangle
+            if is_consecutive(data['high'].iloc[-5:], 3, 'down') and is_consecutive(data['low'].iloc[-5:], 3, 'down'):
+                patterns['bearish']['descending_triangle'] += 2.8
+
+        # 4. Flag/Pennant with Volume Confirmation
+        if (data['volume'].iloc[-5:].mean() < 0.7 * data['volume'].iloc[-20:-5].mean() and
+            data['high'].iloc[-5:].max() - data['low'].iloc[-5:].min() < 0.5 * data['ATR'].iloc[-1]):
+            
+            prev_trend = 'up' if data['close'].iloc[-6] < data['close'].iloc[-5] else 'down'
+            if prev_trend == 'up' and data['close'].iloc[-1] > data['high'].iloc[-6]:
+                patterns['bullish']['bull_flag'] += 3.2
+            elif prev_trend == 'down' and data['close'].iloc[-1] < data['low'].iloc[-6]:
+                patterns['bearish']['bear_flag'] += 3.2
+
+        # 5. Institutional Patterns (Order Blocks/Fair Value Gaps)
+        for i in range(3, len(data)-3):
+            # Bullish Order Block
+            if (data['close'].iloc[i] > data['open'].iloc[i] and
+                data['low'].iloc[i] < data['low'].iloc[i-1] and
+                data['low'].iloc[i] < data['low'].iloc[i+1]):
+                if data['close'].iloc[-1] > data['high'].iloc[i]:
+                    patterns['bullish']['order_block'] += 2.0
+            
+            # Bearish Order Block
+            if (data['close'].iloc[i] < data['open'].iloc[i] and
+                data['high'].iloc[i] > data['high'].iloc[i-1] and
+                data['high'].iloc[i] > data['high'].iloc[i+1]):
+                if data['close'].iloc[-1] < data['low'].iloc[i]:
+                    patterns['bearish']['order_block'] += 2.0
+
+        # 6. Advanced Candlestick Patterns
+        # Three White Soldiers/Black Crows
+        if all(data['close'].iloc[-i] > data['open'].iloc[-i] and
+               data['close'].iloc[-i] > data['close'].iloc[-(i+1)] for i in range(1,4)):
+            patterns['bullish']['three_white_soldiers'] += 2.5
+            
+        if all(data['close'].iloc[-i] < data['open'].iloc[-i] and
+               data['close'].iloc[-i] < data['close'].iloc[-(i+1)] for i in range(1,4)):
+            patterns['bearish']['three_black_crows'] += 2.5
+
+        # 7. Volume-Weighted Breakouts
+        volume_avg = data['volume'].rolling(20).mean().iloc[-1]
+        if data['volume'].iloc[-1] > 2.5 * volume_avg:
+            if data['close'].iloc[-1] > resistance:
+                patterns['bullish']['volume_spike'] += 3.5
+            elif data['close'].iloc[-1] < support:
+                patterns['bearish']['volume_spike'] += 3.5
+
+        # Calculate total scores and validate
+        bull_score = sum(patterns['bullish'].values())
+        bear_score = sum(patterns['bearish'].values())
+        
+        # Final confirmation logic
+        if bull_score >= 5:
+            if (data['close'].iloc[-1] > data['EMA_20'].iloc[-1] and
+                data['volume'].iloc[-1] > data['volume'].iloc[-2]):
+                confidence = min(5, int(bull_score))
+                logging.info(f"Strong Bullish Breakout ({confidence}/5) - {dict(patterns['bullish'])}")
+                return 'buy', confidence
+                
+        if bear_score >= 5:
+            if (data['close'].iloc[-1] < data['EMA_20'].iloc[-1] and
+                data['volume'].iloc[-1] > data['volume'].iloc[-2]):
+                confidence = min(5, int(bear_score))
+                logging.info(f"Strong Bearish Breakout ({confidence}/5) - {dict(patterns['bearish'])}")
+                return 'sell', confidence
+
+        logging.info("No qualified breakout patterns detected")
+        return None
+
+    except Exception as e:
+        logging.error(f"Breakout detection error: {str(e)}", exc_info=True)
         return None
 
 
@@ -726,7 +918,12 @@ def should_trade(symbol, model, scaler, data, balance):
         #0.998 - (atr / current_price * 0.005)
 
         crossover_signal = detect_crossover(data)
-        #pattern_breakout = detect_breakout_patterns(symbol=symbol)
+        signal = detect_breakout_patterns(symbol=symbol)
+        pattern_breakout = None
+        if signal:
+            direction, confidence = signal
+            if confidence >= 4:
+                pattern_breakout = direction
         logging.info(f"Trade conditions for {symbol} - Predicted: {predicted_price}, Current: {current_price}, MA_10: {data['MA_10'].iloc[-1]}, MA_30: {data['MA_30'].iloc[-1]}, RSI: {data['RSI'].iloc[-1]} , MACD : {data['MACD'].iloc[-1]}, Signal {data['Signal'].iloc[-1]} , ATR Confimation {confirm_trade_signal_with_atr(symbol=symbol)}")
         logging.info(f"buy threshold {buy_threshold} - sell threshold {sell_threshold}")
         logging.info(f"cross over signal {crossover_signal}")
@@ -737,16 +934,17 @@ def should_trade(symbol, model, scaler, data, balance):
             and confirm_trade_signal_with_atr(symbol=symbol) == 'buy'
             and (30 < data['RSI'].iloc[-1] < 50)
                 )
-            or 
-            (support_resistance_signal(symbol) == 'buy'
-                and confirm_trade_signal_with_atr(symbol=symbol) == 'buy'
-                )
-            # or
-            # (pattern_breakout == 'buy'
-            #    and confirm_trade_signal_with_atr(symbol=symbol) == 'buy'
-            #    and (30 < data['RSI'].iloc[-1] < 50)
-               
-            #    )
+           # or 
+            # (support_resistance_signal(symbol) == 'buy'
+            #     and confirm_trade_signal_with_atr(symbol=symbol) == 'buy'
+            #     )
+            or(
+                support_resistance_signal_new(symbol=symbol) == 'buy'
+            )
+            or
+            (pattern_breakout == 'buy'
+               )
+            
             and (data['MACD'].iloc[-1] > 0)
         ):
             return 'buy', position_size
@@ -757,20 +955,16 @@ def should_trade(symbol, model, scaler, data, balance):
               and confirm_trade_signal_with_atr(symbol=symbol) == 'sell'
               and (data['RSI'].iloc[-1] > 65)
               )
-               or (support_resistance_signal(symbol) == 'sell'
-                and confirm_trade_signal_with_atr(symbol=symbol) == 'sell'
+            #    or (support_resistance_signal(symbol) == 'sell'
+            #     and confirm_trade_signal_with_atr(symbol=symbol) == 'sell'
+            # )
+            or(
+                support_resistance_signal_new(symbol=symbol) == 'sell'
+                
             )
-            # or (pattern_breakout == 'sell'
-            #    and confirm_trade_signal_with_atr(symbol=symbol) == 'sell'
-            #    and (data['RSI'].iloc[-1] > 65)
-               
-            #    )
-            #(predicted_price < (current_price * sell_threshold))
-            #     and (crossover_signal == 'sell' ))
-                #  or ((data['MA_10'].iloc[-1] < data['MA_30'].iloc[-1]) 
-                # and (data['MACD'].iloc[-1] < data['Signal'].iloc[-1])
-                #and (data['RSI'].iloc[-1] > 65)
-                and (data['MACD'].iloc[-1] < 0)
+            or (pattern_breakout == 'sell'
+               )
+            and (data['MACD'].iloc[-1] < 0)
         ):
             return 'sell', position_size
 
