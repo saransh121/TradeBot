@@ -3,14 +3,11 @@ import time
 import pandas as pd
 import numpy as np
 import logging
-import joblib
 import os
 import threading
 from collections import defaultdict
-from typing import Optional, Tuple
 from dotenv import load_dotenv
-from tensorflow.keras.models import load_model
-from sklearn.preprocessing import MinMaxScaler
+
 
 # Load environment variables
 load_dotenv()
@@ -142,106 +139,6 @@ import logging
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
-
-# def detect_crossover(data, short_ema_col='EMA_7', long_ema_col='EMA_25', trend_ema_col='EMA_99'):
-#     """
-#     Optimized EMA crossover detection with support, trend, breakout, wick, and volume analysis.
-    
-#     :param data: DataFrame containing price, EMA, and volume columns.
-#     :return: 'buy', 'sell', 'watch', or None.
-#     """
-#     if len(data) < 4:
-#         return None  # Not enough data
-
-#     # Extract EMA values
-#     short_prev, short_curr = data[short_ema_col].iloc[-2], data[short_ema_col].iloc[-1]
-#     long_prev, long_curr = data[long_ema_col].iloc[-2], data[long_ema_col].iloc[-1]
-#     trend_curr = data[trend_ema_col].iloc[-1]
-
-#     # Current and previous candle data
-#     open_curr, close_curr, low_curr, high_curr = data['open'].iloc[-1], data['close'].iloc[-1], data['low'].iloc[-1], data['high'].iloc[-1]
-#     close_prev = data['close'].iloc[-2]
-
-#     # Volume data
-#     volume_curr = data['volume'].iloc[-1]
-#     avg_volume = data['volume'].iloc[-20:].mean()  # Average of last 20 periods
-
-#     # EMA slopes
-#     short_slope = short_curr - short_prev
-#     long_slope = long_curr - long_prev
-
-#     # Candle characteristics
-#     is_red_candle = close_curr < open_curr
-#     is_green_candle = close_curr > open_curr
-
-#     # Support/Resistance threshold
-#     support_threshold = 0.001 * close_curr  # 0.1% buffer
-
-#     # EMA Compression threshold
-#     ema_gap = abs(short_curr - long_curr)
-#     compression_threshold = 0.0005 * close_curr  # 0.05% gap
-
-#     # Wick sizes
-#     upper_wick = high_curr - max(open_curr, close_curr)
-#     lower_wick = min(open_curr, close_curr) - low_curr
-
-#     # Candle body size for momentum check
-#     body_size = abs(close_curr - open_curr)
-#     avg_body_size = abs(data['close'].iloc[-5:] - data['open'].iloc[-5:]).mean()
-
-#     # Volume conditions
-#     is_high_volume = volume_curr > 1.1 * avg_volume  # 20% higher than average
-#     is_low_volume = volume_curr < 0.9 * avg_volume   # 20% lower than average
-
-
-#     wick_body_ratio = 1.5
-#     # --- Enhanced Logic with Buffer and Momentum Analysis ---
-
-#     # 1. High Volume Breakout Above EMA → Strong Buy (with Buffer and Momentum)
-#     if (close_prev < short_prev and close_curr > short_curr * 1.001 and close_curr > long_curr * 1.001 
-#              ):
-#         logging.info("High volume breakout above EMA resistance with momentum. Strong BUY signal.")
-#         return 'buy'
-
-#     # 2. High Volume Breakdown Below EMA → Strong Sell (with Buffer and Momentum)
-#     if (close_prev > short_prev and close_curr < short_curr * 0.999 and close_curr < long_curr * 0.999 
-#              ):
-#         logging.info("High volume breakdown below EMA support with momentum. Strong SELL signal.")
-#         return 'sell'
-
-#     # 3. Low Volume Breakout → Ignore Signal
-#     if (close_prev < short_prev and close_curr > short_curr) and is_high_volume and is_green_candle:
-#         logging.info("Green Candle after potential breakout")
-#         return 'watch'
-    
-#     if (close_prev > short_prev and close_curr < short_curr)  and is_high_volume and is_red_candle:
-#         logging.info("Red Candle after potential breakdown")
-#         return 'watch'
-
-#     # 4. EMA Compression (Squeeze) → Trend Reversal Alert
-#     if ema_gap <= compression_threshold:
-#         logging.info("EMA compression detected. Potential breakout or reversal ahead. Signal: WATCH")
-#         return 'watch'
-
-#     # 5. Long Lower Wick Near EMA + High Volume → Buy Signal
-#     if (lower_wick > wick_body_ratio * body_size and  # Wick is 1.5x the body
-#             abs(low_curr - short_curr) <= support_threshold and  # Close to EMA support
-#               # Bullish candle
-#             short_slope > 0 and long_slope > 0 and  # EMAs trending upward
-#             is_high_volume):  # Confirmed by high volume
-#         logging.info("Long lower wick near EMA with high volume and upward trend. Strong BUY signal.")
-#         return 'buy'
-
-#     # 6. Long Upper Wick Near EMA + High Volume → Sell Signal
-#     if (upper_wick > wick_body_ratio * body_size and  # Wick is 1.5x the body
-#             abs(high_curr - short_curr) <= support_threshold and  # Close to EMA resistance
-#             short_slope < 0 and long_slope < 0 and  # EMAs trending downward
-#             (is_high_volume or not is_low_volume)):  # Volume is high or average
-#         logging.info("Long upper wick near EMA with volume confirmation and downward trend. Strong SELL signal.")
-#         return 'sell'
-
-#     return None
-
 
 # new detect cross over logic
 def detect_crossover(data):
@@ -618,7 +515,7 @@ def support_resistance_signal_new(
     """
     try:
         # Fetch OHLCV data
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=600)
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=1000)
         if len(ohlcv) < 100:
             logging.warning(f"Insufficient data for {symbol}")
             return None
@@ -736,7 +633,7 @@ def support_resistance_signal_new(
 
 
 # all break out patterns
-def detect_breakout_patterns(symbol: str, exchange: ccxt.Exchange = exchange, timeframe: str = '1h', 
+def detect_breakout_patterns(symbol: str, exchange: ccxt.Exchange = exchange, timeframe: str = '30m', 
                             confirmation_candles: int = 3, min_pattern_length: int = 10):
     """
     Enhanced breakout pattern detection with:
@@ -750,7 +647,7 @@ def detect_breakout_patterns(symbol: str, exchange: ccxt.Exchange = exchange, ti
     """
     try:
         # Fetch and prepare data
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=300)
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=1000)
         data = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         data['timestamp'] = pd.to_datetime(data['timestamp'], unit='ms')
         
@@ -1110,38 +1007,7 @@ def monitor_positions():
 
 
 # Main Trading Function
-# def trade():
-#     logging.info("Starting bot...")
-#     while True:
-#         try:
-#             balance = fetch_wallet_balance()
-#             if balance > 0:
-#                 for symbol in TRADING_PAIRS:
-#                     logging.info(f"Processing pair: {symbol}")
-#                     data = fetch_data(symbol, TIMEFRAME)
-#                     if data is not None:
-#                         model_path = f"models_lstm/lstm_{symbol.replace('/', '_')}.h5"
-#                         scaler_path = f"models_lstm/scaler_{symbol.replace('/', '_')}.pkl"
-#                         #os.path.exists(model_path) and os.path.exists(scaler_path)
-#                         if data is not None:
-#                             model = None
-#                             scaler = None
-#                             action, size = should_trade(symbol, model, 0, data, balance)
-#                             if action == 'buy':
-#                                 place_order(symbol, 'buy', size)
-#                             elif action == 'sell':
-#                                 place_order(symbol, 'sell', size)
-#                         else:
-#                             logging.warning(f"No LSTM model or scaler found for {symbol}")
 
-#                 # Monitor positions after trading
-#                 # monitor_positions()
-#             else:
-#                 logging.info("Insufficient balance. Waiting for funds.")
-#             time.sleep(25)  # Adjust as needed
-#         except Exception as e:
-#             logging.error(f"Error in main loop: {e}")
-#             time.sleep(10)
 
 #new Trade Logic
 last_trade_time = {}
