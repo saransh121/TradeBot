@@ -498,7 +498,7 @@ def confirm_trade_signal_with_atr(symbol, timeframe='5m', limit=14):
 
 
 #new support resitance 
-def support_resistance_signal(symbol, exchange=exchange, timeframe='15m', buffer=0.002, min_swing_distance=6):
+def support_resistance_signal(symbol, exchange=exchange, timeframe='15m', buffer=0.002, min_swing_distance=4):
     """
     Generates buy/sell signals based on support and resistance levels.
     
