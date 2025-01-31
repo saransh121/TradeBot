@@ -511,7 +511,7 @@ def support_resistance_signal(symbol, exchange=exchange, timeframe='15m', buffer
     """
     try:
         # Fetch OHLCV data
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=100)
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=500)
         data = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         data['timestamp'] = pd.to_datetime(data['timestamp'], unit='ms')
 
@@ -565,15 +565,15 @@ def support_resistance_signal(symbol, exchange=exchange, timeframe='15m', buffer
                 logging.info(f"{symbol}: Sell signal detected. Price near resistance zone {resistance_zone}.")
                 return 'sell'
         
-        # --- Breakout Buy Signal: Price breaks above resistance ---
-        # if current_price > resistance_zone[1] and previous_price <= resistance_zone[1]:
-        #     logging.info(f"{symbol}:  Buy signal detected. Price broke above resistance zone {resistance_zone}.")
-        #     return 'buy'
+        #--- Breakout Buy Signal: Price breaks above resistance ---
+        if current_price > resistance_zone[1] and previous_price <= resistance_zone[1]:
+            logging.info(f"{symbol}:  Buy signal detected. Price broke above resistance zone {resistance_zone}.")
+            return 'buy'
 
         # --- Breakout Sell Signal: Price breaks below support ---
-        # if current_price < support_zone[0] and previous_price >= support_zone[0]:
-        #     logging.info(f"{symbol}:  Sell signal detected. Price broke below support zone {support_zone}.")
-        #     return 'sell'
+        if current_price < support_zone[0] and previous_price >= support_zone[0]:
+            logging.info(f"{symbol}:  Sell signal detected. Price broke below support zone {support_zone}.")
+            return 'sell'
 
         # Default: No signal
         logging.info(f"{symbol}: No significant support-resistance signal generated.")
