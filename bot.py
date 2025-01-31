@@ -566,14 +566,14 @@ def support_resistance_signal(symbol, exchange=exchange, timeframe='15m', buffer
                 return 'sell'
         
         # --- Breakout Buy Signal: Price breaks above resistance ---
-        if current_price > resistance_zone[1] and previous_price <= resistance_zone[1]:
-            logging.info(f"{symbol}:  Buy signal detected. Price broke above resistance zone {resistance_zone}.")
-            return 'buy'
+        # if current_price > resistance_zone[1] and previous_price <= resistance_zone[1]:
+        #     logging.info(f"{symbol}:  Buy signal detected. Price broke above resistance zone {resistance_zone}.")
+        #     return 'buy'
 
         # --- Breakout Sell Signal: Price breaks below support ---
-        if current_price < support_zone[0] and previous_price >= support_zone[0]:
-            logging.info(f"{symbol}:  Sell signal detected. Price broke below support zone {support_zone}.")
-            return 'sell'
+        # if current_price < support_zone[0] and previous_price >= support_zone[0]:
+        #     logging.info(f"{symbol}:  Sell signal detected. Price broke below support zone {support_zone}.")
+        #     return 'sell'
 
         # Default: No signal
         logging.info(f"{symbol}: No significant support-resistance signal generated.")
@@ -726,7 +726,7 @@ def should_trade(symbol, model, scaler, data, balance):
         #0.998 - (atr / current_price * 0.005)
 
         crossover_signal = detect_crossover(data)
-        pattern_breakout = detect_breakout_patterns(symbol=symbol)
+        #pattern_breakout = detect_breakout_patterns(symbol=symbol)
         logging.info(f"Trade conditions for {symbol} - Predicted: {predicted_price}, Current: {current_price}, MA_10: {data['MA_10'].iloc[-1]}, MA_30: {data['MA_30'].iloc[-1]}, RSI: {data['RSI'].iloc[-1]} , MACD : {data['MACD'].iloc[-1]}, Signal {data['Signal'].iloc[-1]} , ATR Confimation {confirm_trade_signal_with_atr(symbol=symbol)}")
         logging.info(f"buy threshold {buy_threshold} - sell threshold {sell_threshold}")
         logging.info(f"cross over signal {crossover_signal}")
@@ -741,12 +741,12 @@ def should_trade(symbol, model, scaler, data, balance):
             (support_resistance_signal(symbol) == 'buy'
                 and confirm_trade_signal_with_atr(symbol=symbol) == 'buy'
                 )
-            or
-            (pattern_breakout == 'buy'
-               and confirm_trade_signal_with_atr(symbol=symbol) == 'buy'
-               and (30 < data['RSI'].iloc[-1] < 50)
+            # or
+            # (pattern_breakout == 'buy'
+            #    and confirm_trade_signal_with_atr(symbol=symbol) == 'buy'
+            #    and (30 < data['RSI'].iloc[-1] < 50)
                
-               )
+            #    )
             and (data['MACD'].iloc[-1] > 0)
         ):
             return 'buy', position_size
@@ -760,11 +760,11 @@ def should_trade(symbol, model, scaler, data, balance):
                or (support_resistance_signal(symbol) == 'sell'
                 and confirm_trade_signal_with_atr(symbol=symbol) == 'sell'
             )
-            or (pattern_breakout == 'sell'
-               and confirm_trade_signal_with_atr(symbol=symbol) == 'sell'
-               and (data['RSI'].iloc[-1] > 65)
+            # or (pattern_breakout == 'sell'
+            #    and confirm_trade_signal_with_atr(symbol=symbol) == 'sell'
+            #    and (data['RSI'].iloc[-1] > 65)
                
-               )
+            #    )
             #(predicted_price < (current_price * sell_threshold))
             #     and (crossover_signal == 'sell' ))
                 #  or ((data['MA_10'].iloc[-1] < data['MA_30'].iloc[-1]) 
