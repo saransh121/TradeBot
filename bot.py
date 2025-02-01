@@ -515,7 +515,7 @@ def support_resistance_signal_new(
     """
     try:
         # Fetch OHLCV data
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=1000)
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=600)
         if len(ohlcv) < 100:
             logging.warning(f"Insufficient data for {symbol}")
             return None
@@ -647,7 +647,7 @@ def detect_breakout_patterns(symbol: str, exchange: ccxt.Exchange = exchange, ti
     """
     try:
         # Fetch and prepare data
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=1000)
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=300)
         data = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         data['timestamp'] = pd.to_datetime(data['timestamp'], unit='ms')
         
