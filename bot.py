@@ -7,7 +7,7 @@ import os
 import threading
 from collections import defaultdict
 from dotenv import load_dotenv
-
+from scipy.signal import argrelextrema
 
 # Load environment variables
 load_dotenv()
@@ -633,15 +633,23 @@ def support_resistance_signal_new(
 
 
 # all break out patterns
+
 def detect_breakout_patterns(symbol: str, exchange: ccxt.Exchange = exchange, timeframe: str = '1h', 
                             confirmation_candles: int = 3, min_pattern_length: int = 10):
     """
-    Enhanced breakout pattern detection with:
-    - 12 major pattern types
-    - Volume confirmation
-    - Retest validation
-    - Trend alignment
-    - Pattern strength scoring
+    Enhanced breakout pattern detection with 12 major patterns:
+    - Horizontal Breakout
+    - Trendline Breakout
+    - Ascending/Descending Triangle
+    - Flag/Pennant
+    - Order Blocks
+    - Three White Soldiers/Black Crows
+    - Volume Spike Breakouts
+    - Cup & Handle (NEW)
+    - Head & Shoulders (NEW)
+    - Rectangle Patterns
+    - Wedge Breakouts
+    - Channel Breakouts
     
     Returns: 'buy', 'sell' with confidence score (1-5), or None
     """
@@ -657,6 +665,27 @@ def detect_breakout_patterns(symbol: str, exchange: ccxt.Exchange = exchange, ti
         data['EMA_50'] = data['close'].ewm(span=50, adjust=False).mean()
         data['VWAP'] = (data['volume'] * (data['high'] + data['low'] + data['close']) / 3).cumsum() / data['volume'].cumsum()
         
+        # Pattern weights dictionary
+        PATTERN_WEIGHTS = {
+            # Existing patterns
+            'horizontal_breakout': 2.5,
+            'trendline_breakout': 3.0,
+            'ascending_triangle': 2.8,
+            'descending_triangle': 2.8,
+            'bull_flag': 3.2,
+            'bear_flag': 3.2,
+            'order_block': 2.0,
+            'three_white_soldiers': 2.5,
+            'three_black_crows': 2.5,
+            'volume_spike': 3.5,
+            # New patterns
+            'cup_handle': 3.8,
+            'head_shoulders': 4.0,
+            'rectangle': 2.2,
+            'wedge': 2.5,
+            'channel': 2.3
+        }
+
         # Initialize pattern storage with confidence scores
         patterns = {
             'bullish': defaultdict(float),
@@ -673,107 +702,153 @@ def detect_breakout_patterns(symbol: str, exchange: ccxt.Exchange = exchange, ti
                     return True
             return False
 
-        # 1. Horizontal Breakout (Support/Resistance)
+        # 1. Horizontal Breakout
         resistance = data['high'].rolling(20).max().iloc[-1]
         support = data['low'].rolling(20).min().iloc[-1]
         buffer = data['ATR'].iloc[-1] * 0.3
         
         if data['close'].iloc[-1] > resistance + buffer:
-            patterns['bullish']['horizontal_breakout'] += 2.5
+            patterns['bullish']['horizontal_breakout'] += PATTERN_WEIGHTS['horizontal_breakout']
         if data['close'].iloc[-1] < support - buffer:
-            patterns['bearish']['horizontal_breakout'] += 2.5
+            patterns['bearish']['horizontal_breakout'] += PATTERN_WEIGHTS['horizontal_breakout']
 
-        # 2. Trendline Breakout with Fibonacci Extension
+        # 2. Trendline Breakout
         highs = data['high'].values[-min_pattern_length:]
         lows = data['low'].values[-min_pattern_length:]
         
-        # Automated trendline detection
         for i in range(len(highs)-4):
             try:
-                if highs[i+2] > highs[i] and highs[i+2] > highs[i+4]:  # Potential descending trendline
+                if highs[i+2] > highs[i] and highs[i+2] > highs[i+4]:
                     slope = (highs[i+4] - highs[i]) / 4
                     projected = highs[i] + slope * (len(highs)-i)
                     if data['close'].iloc[-1] > projected + buffer:
-                        patterns['bullish']['trendline_breakout'] += 3.0
+                        patterns['bullish']['trendline_breakout'] += PATTERN_WEIGHTS['trendline_breakout']
             except IndexError:
                 continue
 
-        # 3. Triangle Patterns with Volume Squeeze
+        # 3. Triangle Patterns
         max_high = data['high'].rolling(20).max()
         min_low = data['low'].rolling(20).min()
         volatility = (max_high - min_low).pct_change()
         
         if volatility.iloc[-1] < 0.5 * volatility.mean():
-            # Ascending Triangle
             if is_consecutive(data['high'].iloc[-5:], 3, 'up') and is_consecutive(data['low'].iloc[-5:], 3, 'up'):
-                patterns['bullish']['ascending_triangle'] += 2.8
+                patterns['bullish']['ascending_triangle'] += PATTERN_WEIGHTS['ascending_triangle']
             
-            # Descending Triangle
             if is_consecutive(data['high'].iloc[-5:], 3, 'down') and is_consecutive(data['low'].iloc[-5:], 3, 'down'):
-                patterns['bearish']['descending_triangle'] += 2.8
+                patterns['bearish']['descending_triangle'] += PATTERN_WEIGHTS['descending_triangle']
 
-        # 4. Flag/Pennant with Volume Confirmation
+        # 4. Flag/Pennant Patterns
         if (data['volume'].iloc[-5:].mean() < 0.7 * data['volume'].iloc[-20:-5].mean() and
             data['high'].iloc[-5:].max() - data['low'].iloc[-5:].min() < 0.5 * data['ATR'].iloc[-1]):
             
             prev_trend = 'up' if data['close'].iloc[-6] < data['close'].iloc[-5] else 'down'
             if prev_trend == 'up' and data['close'].iloc[-1] > data['high'].iloc[-6]:
-                patterns['bullish']['bull_flag'] += 3.2
+                patterns['bullish']['bull_flag'] += PATTERN_WEIGHTS['bull_flag']
             elif prev_trend == 'down' and data['close'].iloc[-1] < data['low'].iloc[-6]:
-                patterns['bearish']['bear_flag'] += 3.2
+                patterns['bearish']['bear_flag'] += PATTERN_WEIGHTS['bear_flag']
 
-        # 5. Institutional Patterns (Order Blocks/Fair Value Gaps)
+        # 5. Order Blocks
         for i in range(3, len(data)-3):
-            # Bullish Order Block
             if (data['close'].iloc[i] > data['open'].iloc[i] and
                 data['low'].iloc[i] < data['low'].iloc[i-1] and
                 data['low'].iloc[i] < data['low'].iloc[i+1]):
                 if data['close'].iloc[-1] > data['high'].iloc[i]:
-                    patterns['bullish']['order_block'] += 2.0
+                    patterns['bullish']['order_block'] += PATTERN_WEIGHTS['order_block']
             
-            # Bearish Order Block
             if (data['close'].iloc[i] < data['open'].iloc[i] and
                 data['high'].iloc[i] > data['high'].iloc[i-1] and
                 data['high'].iloc[i] > data['high'].iloc[i+1]):
                 if data['close'].iloc[-1] < data['low'].iloc[i]:
-                    patterns['bearish']['order_block'] += 2.0
+                    patterns['bearish']['order_block'] += PATTERN_WEIGHTS['order_block']
 
-        # 6. Advanced Candlestick Patterns
-        # Three White Soldiers/Black Crows
+        # 6. Candlestick Patterns
         if all(data['close'].iloc[-i] > data['open'].iloc[-i] and
                data['close'].iloc[-i] > data['close'].iloc[-(i+1)] for i in range(1,4)):
-            patterns['bullish']['three_white_soldiers'] += 2.5
+            patterns['bullish']['three_white_soldiers'] += PATTERN_WEIGHTS['three_white_soldiers']
             
         if all(data['close'].iloc[-i] < data['open'].iloc[-i] and
                data['close'].iloc[-i] < data['close'].iloc[-(i+1)] for i in range(1,4)):
-            patterns['bearish']['three_black_crows'] += 2.5
+            patterns['bearish']['three_black_crows'] += PATTERN_WEIGHTS['three_black_crows']
 
-        # 7. Volume-Weighted Breakouts
+        # 7. Volume Spike Breakouts
         volume_avg = data['volume'].rolling(20).mean().iloc[-1]
         if data['volume'].iloc[-1] > 2.5 * volume_avg:
             if data['close'].iloc[-1] > resistance:
-                patterns['bullish']['volume_spike'] += 3.5
+                patterns['bullish']['volume_spike'] += PATTERN_WEIGHTS['volume_spike']
             elif data['close'].iloc[-1] < support:
-                patterns['bearish']['volume_spike'] += 3.5
+                patterns['bearish']['volume_spike'] += PATTERN_WEIGHTS['volume_spike']
 
-        # Calculate total scores and validate
+        # 8. Cup & Handle (NEW)
+        cup_period = 50
+        handle_period = 10
+        if len(data) > cup_period + handle_period:
+            cup_high = data['high'].iloc[-cup_period-handle_period:-handle_period].max()
+            cup_low = data['low'].iloc[-cup_period-handle_period:-handle_period].min()
+            handle_high = data['high'].iloc[-handle_period:].max()
+            
+            # Check for U-shape and handle consolidation
+            if (cup_high > handle_high and
+                data['close'].iloc[-1] > handle_high + buffer and
+                data['volume'].iloc[-handle_period:].mean() > data['volume'].iloc[-cup_period-handle_period:-handle_period].mean()):
+                patterns['bullish']['cup_handle'] += PATTERN_WEIGHTS['cup_handle']
+
+        # 9. Head & Shoulders (NEW)
+        peaks = argrelextrema(data['high'].values, np.greater, order=3)[0]
+        if len(peaks) >= 3:
+            # Find the most recent three peaks
+            recent_peaks = peaks[-3:]
+            if (data['high'].iloc[recent_peaks[1]] > data['high'].iloc[recent_peaks[0]] and
+                data['high'].iloc[recent_peaks[1]] > data['high'].iloc[recent_peaks[2]]):
+                
+                # Calculate neckline (lowest low between shoulders)
+                left_trough = data['low'].iloc[recent_peaks[0]:recent_peaks[1]].min()
+                right_trough = data['low'].iloc[recent_peaks[1]:recent_peaks[2]].min()
+                neckline = min(left_trough, right_trough)
+                
+                if data['close'].iloc[-1] < neckline - data['ATR'].iloc[-1] * 0.5:
+                    patterns['bearish']['head_shoulders'] += PATTERN_WEIGHTS['head_shoulders']
+
+        # 10. Rectangle Pattern
+        recent_high = data['high'].iloc[-10:].max()
+        recent_low = data['low'].iloc[-10:].min()
+        if (recent_high - recent_low) < data['ATR'].iloc[-1] * 0.5:
+            if data['close'].iloc[-1] > recent_high:
+                patterns['bullish']['rectangle'] += PATTERN_WEIGHTS['rectangle']
+            elif data['close'].iloc[-1] < recent_low:
+                patterns['bearish']['rectangle'] += PATTERN_WEIGHTS['rectangle']
+
+        # 11. Wedge Patterns
+        if is_consecutive(data['high'].iloc[-10:], 5, 'down') and is_consecutive(data['low'].iloc[-10:], 5, 'up'):
+            patterns['bullish']['wedge'] += PATTERN_WEIGHTS['wedge']
+        elif is_consecutive(data['high'].iloc[-10:], 5, 'up') and is_consecutive(data['low'].iloc[-10:], 5, 'down'):
+            patterns['bearish']['wedge'] += PATTERN_WEIGHTS['wedge']
+
+        # 12. Channel Breakouts
+        upper_channel = data['high'].rolling(20).max()
+        lower_channel = data['low'].rolling(20).min()
+        if data['close'].iloc[-1] > upper_channel.iloc[-1] + buffer:
+            patterns['bullish']['channel'] += PATTERN_WEIGHTS['channel']
+        elif data['close'].iloc[-1] < lower_channel.iloc[-1] - buffer:
+            patterns['bearish']['channel'] += PATTERN_WEIGHTS['channel']
+
+        # Final scoring and validation
         bull_score = sum(patterns['bullish'].values())
         bear_score = sum(patterns['bearish'].values())
         
-        # Final confirmation logic
-        if bull_score >= 5:
-            if (data['close'].iloc[-1] > data['EMA_20'].iloc[-1] and
-                data['volume'].iloc[-1] > data['volume'].iloc[-2]):
-                confidence = min(5, int(bull_score))
-                logging.info(f"Strong Bullish Breakout ({confidence}/5) - {dict(patterns['bullish'])}")
-                return 'buy', confidence
-                
-        if bear_score >= 5:
-            if (data['close'].iloc[-1] < data['EMA_20'].iloc[-1] and
-                data['volume'].iloc[-1] > data['volume'].iloc[-2]):
-                confidence = min(5, int(bear_score))
-                logging.info(f"Strong Bearish Breakout ({confidence}/5) - {dict(patterns['bearish'])}")
-                return 'sell', confidence
+        confirmation_threshold = 5
+        volume_confirmation = data['volume'].iloc[-1] > data['volume'].iloc[-2]
+        trend_alignment = data['EMA_20'].iloc[-1] > data['EMA_50'].iloc[-1] if bull_score else data['EMA_20'].iloc[-1] < data['EMA_50'].iloc[-1]
+
+        if bull_score >= confirmation_threshold and volume_confirmation and trend_alignment:
+            confidence = min(5, int(bull_score))
+            logging.info(f"Bullish Breakout ({confidence}/5) - {dict(patterns['bullish'])}")
+            return 'buy', confidence
+            
+        if bear_score >= confirmation_threshold and volume_confirmation and trend_alignment:
+            confidence = min(5, int(bear_score))
+            logging.info(f"Bearish Breakout ({confidence}/5) - {dict(patterns['bearish'])}")
+            return 'sell', confidence
 
         logging.info("No qualified breakout patterns detected")
         return None
