@@ -901,16 +901,12 @@ def should_trade(symbol, model, scaler, data, balance):
         logging.info(f"cross over signal {crossover_signal}")
         # Remove the proximity condition for buy and sell
         # Buy Condition
-        if ((crossover_signal == 'buy' 
-            and support_resistance_signal(symbol) == 'buy'
-            and confirm_trade_signal_with_atr(symbol=symbol) == 'buy'
-            and (30 < data['RSI'].iloc[-1] < 50)
-                )
+        if (
            # or 
             # (support_resistance_signal(symbol) == 'buy'
             #     and confirm_trade_signal_with_atr(symbol=symbol) == 'buy'
             #     )
-            or(
+            (
                 support_resistance_signal_new(symbol=symbol) == 'buy'
             )
             or
@@ -922,15 +918,11 @@ def should_trade(symbol, model, scaler, data, balance):
             return 'buy', position_size
 
         # Sell Condition
-        elif ((crossover_signal == 'sell' 
-               and support_resistance_signal(symbol) == 'sell'
-              and confirm_trade_signal_with_atr(symbol=symbol) == 'sell'
-              and (data['RSI'].iloc[-1] > 65)
-              )
+        elif (
             #    or (support_resistance_signal(symbol) == 'sell'
             #     and confirm_trade_signal_with_atr(symbol=symbol) == 'sell'
             # )
-            or(
+            (
                 support_resistance_signal_new(symbol=symbol) == 'sell'
                 
             )
