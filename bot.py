@@ -905,7 +905,7 @@ def should_trade(symbol, model, scaler, data, balance):
         if (
             (
                 support_resistance_signal_new(symbol=symbol) == 'buy'
-                or pattern_breakout == 'buy'
+                #or pattern_breakout == 'buy'
             )
             and (data['MACD'].iloc[-1] > 0)  # Apply MACD condition properly
         ):
@@ -915,7 +915,7 @@ def should_trade(symbol, model, scaler, data, balance):
         elif (
             (
                 support_resistance_signal_new(symbol=symbol) == 'sell'
-                or pattern_breakout == 'sell'
+                #or pattern_breakout == 'sell'
             )
             and (data['MACD'].iloc[-1] < 0)  # Apply MACD condition properly
         ):
