@@ -25,9 +25,9 @@ exchange = ccxt.binance({
 logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Parameters
-LEVERAGE = 15
+LEVERAGE = 20
 POSITION_SIZE_PERCENT = 0.2  # % of wallet balance to trade per coin
-TIMEFRAME = '5m'
+TIMEFRAME = '15m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
@@ -499,7 +499,7 @@ def calculate_ema(data: pd.Series, period: int) -> pd.Series:
 def support_resistance_signal_new(
     symbol: str,
     exchange= exchange,
-    timeframe: str = '5m',
+    timeframe: str = '15m',
     min_swing_distance: int = 5,
     atr_multiplier: float = 1,
     volume_threshold: float = 1.8
@@ -943,7 +943,7 @@ def monitor_positions():
                 position_side = position['side']  # 'long' or 'short'
 
                 # Fetch last 14 candles for ATR calculation
-                ohlcv = exchange.fetch_ohlcv(symbol, timeframe='5m', limit=14)
+                ohlcv = exchange.fetch_ohlcv(symbol, timeframe='15m', limit=14)
 
                 # ATR calculation (Average True Range)
                 high_prices = [candle[2] for candle in ohlcv]
