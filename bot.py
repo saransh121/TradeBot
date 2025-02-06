@@ -274,7 +274,7 @@ class CryptoTradingEnv(gym.Env):
 
 
 
-def fetch_top_movers(limit=25):
+def fetch_top_movers(limit=11):
     """
     Fetch top high-volume coins based on 24h trading volume.
 
