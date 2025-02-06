@@ -7,3 +7,14 @@ joblib
 tensorflow
 schedule
 python-dotenv 
+ccxt
+pandas
+numpy
+logging
+python-dotenv
+scipy
+scikit-learn
+tensorflow
+keras
+gym
+stable-baselines3
