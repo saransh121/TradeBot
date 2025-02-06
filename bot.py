@@ -1275,7 +1275,7 @@ def should_trade(symbol, model, scaler, data, balance):
 
         obs = env.get_observation()  # Get real-time market data
         action, _ = model.predict(obs)
-        trade_action = ["Hold", "Buy", "Sell"][action]
+        trade_action = ["Hold", "buy", "sell"][action]
 
         logging.info(f"trade_action {trade_action}")
         logging.info(f"Trade conditions for {symbol} - Predicted: {predicted_price}, Current: {current_price}, MA_10: {data['MA_10'].iloc[-1]}, MA_30: {data['MA_30'].iloc[-1]}, RSI: {data['RSI'].iloc[-1]}, MACD: {data['MACD'].iloc[-1]}, Signal: {data['Signal'].iloc[-1]}, ATR Confirmation: {confirm_trade_signal_with_atr(symbol=symbol)}")
