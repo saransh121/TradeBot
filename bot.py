@@ -8,6 +8,25 @@ import threading
 from collections import defaultdict
 from dotenv import load_dotenv
 from scipy.signal import argrelextrema
+from dotenv import load_dotenv
+from scipy.signal import argrelextrema
+from sklearn.preprocessing import MinMaxScaler
+from keras.models import Sequential
+from keras.models import Model
+from keras.layers import Dense, LSTM, Dropout
+from keras.optimizers import Adam
+from keras.regularizers import l2
+from keras.losses import Huber
+from keras.layers import Bidirectional, Attention, Conv1D, Flatten
+from keras.layers import Input, Conv1D, LSTM, Dense, Dropout, Flatten, BatchNormalization, Bidirectional,Multiply
+import tensorflow as tf
+
+import gym
+import numpy as np
+from gym import spaces
+from stable_baselines3 import PPO
+import logging
+import time
 
 # Load environment variables
 load_dotenv()
@@ -25,11 +44,267 @@ exchange = ccxt.binance({
 logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Parameters
-LEVERAGE = 20
+LEVERAGE = 15
 POSITION_SIZE_PERCENT = 0.2  # % of wallet balance to trade per coin
 TIMEFRAME = '15m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
+
+import gym
+import numpy as np
+from gym import spaces
+from stable_baselines3 import PPO
+import logging
+import time
+
+class CryptoTradingEnv(gym.Env):
+    def __init__(self, exchange, symbol, timeframe='15m'):
+        super(CryptoTradingEnv, self).__init__()
+
+        self.exchange = exchange
+        self.symbol = symbol
+        self.timeframe = timeframe
+
+        # 3 Actions: Hold (0), Buy (1), Sell (2)
+        self.action_space = spaces.Discrete(3)
+
+        # 10 Features: Closing price, volume, RSI, MACD, ATR, Bollinger, EMA, etc.
+        self.observation_space = spaces.Box(low=-1, high=1, shape=(10,), dtype=np.float32)
+
+        self.current_step = 0
+        self.data = self.fetch_data()  # Load initial market data
+        self.balance = 100  # Simulated starting balance
+        self.position = 0  # 0: No position, 1: Long, -1: Short
+
+    # def fetch_data(self):
+    #     """Fetch latest OHLCV and indicators for training."""
+    #     try:
+    #         ohlcv = self.exchange.fetch_ohlcv(self.symbol, self.timeframe, limit=100)
+    #         data = np.array(ohlcv)
+            
+    #         # Extract OHLCV features
+    #         close = data[:, 4]  # Closing price
+    #         volume = data[:, 5]  # Volume
+
+    #         # Technical indicators
+    #         rsi = self.calculate_rsi(close)
+    #         macd, signal = self.calculate_macd(close)
+    #         atr = self.calculate_atr(data)
+    #         ema_50 = self.calculate_ema(close, 50)
+    #         ema_200 = self.calculate_ema(close, 200)
+    #         upper_band, lower_band = self.calculate_bollinger_bands(close)
+
+    #         indicators = np.column_stack((close, volume, rsi, macd, signal, atr, ema_50, ema_200, upper_band, lower_band))
+    #         return indicators
+
+    #     except Exception as e:
+    #         logging.error(f"Error fetching data for {self.symbol}: {e}")
+    #         return np.zeros((100, 10))  # Return zeros if error
+
+    def fetch_data(self):
+        """Fetch latest OHLCV and indicators for training."""
+        try:
+            ohlcv = self.exchange.fetch_ohlcv(self.symbol, self.timeframe, limit=150)  # Increase limit to 150
+            data = np.array(ohlcv)
+
+            if len(data) < 125:  # Ensure we have at least 125 rows of data
+                logging.warning(f"Not enough historical data for {self.symbol}. Required: 125, Available: {len(data)}")
+                return None  # Return None if there's not enough data
+
+            # Extract OHLCV features
+            close = data[:, 4]  # Closing price
+            volume = data[:, 5]  # Volume
+
+            # Compute indicators with logging
+            rsi = self.calculate_rsi_rl(close)
+
+            macd, signal = self.calculate_macd_rl(close)
+
+            atr = self.calculate_atr_rl(data)
+
+            ema_50 = self.calculate_ema_rl(close, 50)
+
+            ema_200 = self.calculate_ema_rl(close, 200)
+
+            upper_band, lower_band = self.calculate_bollinger_bands_rl(close)
+
+            # Find the **minimum** length across all indicators
+            min_length = min(
+                len(close), len(volume), len(rsi), len(macd), len(signal), len(atr),
+                len(ema_50), len(ema_200), len(upper_band), len(lower_band)
+            )
+
+            # Trim all arrays to match `min_length`
+            close, volume = close[-min_length:], volume[-min_length:]
+            rsi, macd, signal = rsi[-min_length:], macd[-min_length:], signal[-min_length:]
+            atr, ema_50, ema_200 = atr[-min_length:], ema_50[-min_length:], ema_200[-min_length:]
+            upper_band, lower_band = upper_band[-min_length:], lower_band[-min_length:]
+
+            # Stack indicators
+            indicators = np.column_stack((close, volume, rsi, macd, signal, atr, ema_50, ema_200, upper_band, lower_band))
+
+            return indicators
+
+        except Exception as e:
+            logging.error(f"Error fetching data for {self.symbol}: {e}")
+            return None  # Return None to indicate failure
+
+
+
+
+    def step(self, action):
+        """Perform an action and return the new state, reward, and done flag."""
+        self.current_step += 1
+        done = self.current_step >= len(self.data) - 1
+
+        reward = self.get_reward(action)  # Calculate reward
+        obs = self.get_observation()  # Get next observation
+
+        return obs, reward, done, {}
+
+    def reset(self):
+        """Reset environment at the start of a new episode."""
+        self.current_step = 0
+        self.balance = 100
+        self.position = 0
+        self.data = self.fetch_data()
+        return self.get_observation()
+
+    def get_observation(self):
+        """Return real-time indicators (normalized between -1 and 1)."""
+        obs = self.data[self.current_step] if self.current_step < len(self.data) else np.zeros(10)
+        return np.interp(obs, (np.min(obs), np.max(obs)), (-1, 1))  # Normalize between -1 and 1
+
+    def get_reward(self, action):
+        """Calculate reward based on profit/loss."""
+        price_change = self.data[self.current_step, 0] - self.data[self.current_step - 1, 0]
+
+        if action == 1:  # Buy
+            self.position = 1
+            return price_change * 100
+        elif action == 2:  # Sell
+            self.position = -1
+            return -price_change * 100
+        return 0  # Hold action has no reward
+
+    def calculate_rsi_rl(self, prices, period=14):
+        """Calculate Relative Strength Index (RSI)."""
+        if len(prices) < period:
+            return np.full(len(prices), np.nan)  # Return array of NaNs if insufficient data
+
+        delta = np.diff(prices)
+        gain = np.where(delta > 0, delta, 0)
+        loss = np.where(delta < 0, -delta, 0)
+
+        avg_gain = np.convolve(gain, np.ones(period)/period, mode='valid')
+        avg_loss = np.convolve(loss, np.ones(period)/period, mode='valid')
+
+        rs = avg_gain / (avg_loss + 1e-9)  # Avoid division by zero
+        rsi = 100 - (100 / (1 + rs))
+
+        # Pad the beginning with NaNs to maintain the same length as `prices`
+        return np.concatenate([np.full(period-1, np.nan), rsi])
+
+
+    def calculate_macd_rl(self, prices, short_window=12, long_window=26, signal_window=9):
+        """Calculate MACD and Signal Line with proper length handling."""
+        
+        if len(prices) < long_window:
+            return np.full(len(prices), np.nan), np.full(len(prices), np.nan)  # Handle short data case
+
+        ema_short = self.calculate_ema_rl(prices, short_window)
+        ema_long = self.calculate_ema_rl(prices, long_window)
+
+        # **Ensure same length by padding the shorter EMA with NaNs**
+        diff_length = len(ema_long) - len(ema_short)
+        if diff_length > 0:
+            ema_short = np.pad(ema_short, (diff_length, 0), mode='constant', constant_values=np.nan)
+        elif diff_length < 0:
+            ema_long = np.pad(ema_long, (-diff_length, 0), mode='constant', constant_values=np.nan)
+
+        # Compute MACD and Signal
+        macd = ema_short - ema_long
+        signal = self.calculate_ema_rl(macd, signal_window)
+
+        # **Ensure all arrays match `prices` length**
+        min_length = min(len(prices), len(macd), len(signal))
+        
+        return macd[-min_length:], signal[-min_length:]
+
+
+
+    def calculate_atr_rl(self, data, period=14):
+        """Calculate Average True Range (ATR)."""
+        if len(data) < period:
+            return np.full(len(data), np.nan)  # Handle short data case
+
+        high_low = data[:, 2] - data[:, 3]
+        high_close = np.abs(data[:, 2] - np.roll(data[:, 4], shift=1))
+        low_close = np.abs(data[:, 3] - np.roll(data[:, 4], shift=1))
+
+        true_range = np.maximum(high_low, np.maximum(high_close, low_close))
+        atr = np.convolve(true_range, np.ones(period) / period, mode='valid')
+
+        return np.concatenate([np.full(period-1, np.nan), atr])
+
+
+    def calculate_ema_rl(self, prices, period):
+        """Calculate Exponential Moving Average (EMA)."""
+        if len(prices) < period:
+            return np.zeros(len(prices))
+        return np.convolve(prices, np.ones(period) / period, mode='valid')
+
+    def calculate_bollinger_bands_rl(self, prices, window=20):
+        """Calculate Bollinger Bands with shape correction."""
+        if len(prices) < window:
+            logging.warning(f"Not enough data for Bollinger Bands. Required: {window}, Available: {len(prices)}")
+            return np.zeros(len(prices)), np.zeros(len(prices))
+
+        sma = np.convolve(prices, np.ones(window) / window, mode='valid')
+        std = np.std(prices[-window:])
+
+        # Ensure equal length
+        min_len = min(len(sma), len(prices[-window:]))
+        sma, std = sma[-min_len:], np.full(min_len, std)
+
+        return sma + (2 * std), sma - (2 * std)
+
+    
+
+
+
+
+def fetch_top_movers(limit=25):
+    """
+    Fetch top high-volume coins based on 24h trading volume.
+
+    :param limit: Number of coins to return.
+    :return: List of selected trading pairs.
+    """
+    try:
+        tickers = exchange.fetch_tickers()
+
+        volume_list = []
+        for symbol, data in tickers.items():
+            if "USDT" in symbol and isinstance(data, dict) and 'quoteVolume' in data:
+                volume = float(data['quoteVolume'])  # 24h trading volume in quote currency
+                volume_list.append((symbol, volume))
+
+        # Sort by highest volume
+        volume_list = sorted(volume_list, key=lambda x: x[1], reverse=True)
+
+        # Select top `limit` symbols
+        top_symbols = [symbol for symbol, _ in volume_list[:limit]]
+
+        logging.info(f"Top high-volume coins selected: {top_symbols}")
+        return top_symbols
+
+    except Exception as e:
+        logging.error(f"Error fetching high-volume coins: {e}")
+        return []
+
+
+
 
 # Trading Pairs
 def load_trading_pairs(file_path="trading_pairs.txt"):
@@ -52,7 +327,11 @@ def load_trading_pairs(file_path="trading_pairs.txt"):
         return []
 
 # Load trading pairs from file
-TRADING_PAIRS = load_trading_pairs()
+print(fetch_top_movers())
+TRADING_PAIRS = (fetch_top_movers())
+
+
+
 
 
 # Fetch wallet balance
@@ -72,10 +351,21 @@ def fetch_data(symbol, timeframe, limit=500):
         ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+
+        # Ensure we always have `N_STEPS` rows, otherwise pad with previous values
+        if len(df) < N_STEPS:
+            logging.warning(f"Not enough historical data for {symbol}. Required: {N_STEPS}, Available: {len(df)}")
+            
+            # Pad with last available row
+            last_row = df.iloc[-1] if not df.empty else None
+            while len(df) < N_STEPS:
+                df = pd.concat([df, pd.DataFrame([last_row])], ignore_index=True)
+
         return df
     except Exception as e:
         logging.error(f"Error fetching data for {symbol}: {e}")
         return None
+
 
 # Add Technical Indicators
 def add_indicators(data):
@@ -255,10 +545,10 @@ def detect_crossover(data):
 
 
 # Prepare LSTM Input Data
-def prepare_lstm_input(data, scaler, n_steps=60):
+def prepare_lstm_input(data, scaler, n_steps=N_STEPS):
     try:
-        features = ['open', 'high', 'low', 'close', 'volume', 'MA_10', 'MA_30', 'RSI', 'ATR','EMA_12','EMA_26','MACD','EMA_7','EMA_25','EMA_99','Upper_Band','Lower_Band']
-        scaled_data = scaler.transform(data[features].tail(n_steps))
+        features = ['open', 'high', 'low', 'close', 'volume']
+        scaled_data = scaler.fit_transform(data[features].tail(n_steps))
         return scaled_data.reshape(1, n_steps, len(features))
     except Exception as e:
         logging.error(f"Error preparing LSTM input: {e}")
@@ -394,6 +684,74 @@ def confirm_trade_signal_with_atr(symbol, timeframe='5m', limit=14):
     except Exception as e:
         logging.error(f"Error in confirming trade signal with ATR buffer for {symbol}: {e}")
         return None
+
+
+# AI Model Setup
+def attention_layer(inputs):
+    attention_probs = Dense(inputs.shape[-1], activation='softmax')(inputs)
+    attention_output = Multiply()([inputs, attention_probs])
+    return attention_output
+
+scaler = MinMaxScaler()
+
+# Input layer
+input_layer = Input(shape=(N_STEPS, 5))
+
+# Conv1D for short-term pattern detection
+conv_layer = Conv1D(filters=64, kernel_size=3, activation='relu')(input_layer)
+conv_layer = BatchNormalization()(conv_layer)  # Normalization added
+
+# First Bi-LSTM Layer
+lstm_layer = Bidirectional(LSTM(100, return_sequences=True))(conv_layer)
+lstm_layer = Dropout(0.2)(lstm_layer)
+
+# Second Bi-LSTM Layer
+lstm_layer = Bidirectional(LSTM(100, return_sequences=True))(lstm_layer)
+lstm_layer = Dropout(0.2)(lstm_layer)
+
+# ✅ Attention Layer with Dropout
+attention = Attention()([lstm_layer, lstm_layer])
+attention = Dropout(0.2)(attention)  # Added dropout
+
+# Flatten to connect to Dense layers
+flat = Flatten()(attention)
+
+# Dense Layers with L2 Regularization
+dense_layer = Dense(50, activation='relu', kernel_regularizer=l2(0.01))(flat)
+dense_layer = Dropout(0.2)(dense_layer)  # Dropout added for stability
+
+# Output Layer
+output_layer = Dense(1)(dense_layer)
+
+# Define & compile model
+model = Model(inputs=input_layer, outputs=output_layer)
+model.compile(optimizer=Adam(learning_rate=0.001), loss=Huber(delta=1.0))
+
+
+
+
+
+# AI-Based Prediction with Proper Rescaling
+def ai_predict(data):
+    try:
+        lstm_input = prepare_lstm_input(data, scaler)
+        if lstm_input is not None:
+            scaled_prediction = model.predict(lstm_input)[0][0]
+
+            # Create a dummy row with same shape as input features
+            dummy_row = np.zeros((1, 5))  # Adjust to match the number of input features
+            dummy_row[0, 3] = scaled_prediction  # 'close' price is typically the 3rd index
+
+            # Rescale back to actual price range
+            predicted_price = scaler.inverse_transform(dummy_row)[0, 3]
+            
+            logging.info(f"AI Scaled Prediction: {scaled_prediction}, Rescaled Prediction: {predicted_price}")
+            return predicted_price
+    except Exception as e:
+        logging.error(f"Error in AI prediction: {e}")
+        return None
+
+
 
 
 #new support resitance 
@@ -867,27 +1225,19 @@ def should_trade(symbol, model, scaler, data, balance):
             return None, 0
 
         current_price = data['close'].iloc[-1]
-        #lstm_input =
-        #prepare_lstm_input(data, scaler, n_steps=N_STEPS)
-        # if lstm_input is None:
+        predicted_price = 0
+        # if predicted_price is None:
         #     return None, 0
 
-        predicted_price = 1
-        #model.predict(lstm_input)[0][0]
-        dummy_row = np.zeros((1, 17)) 
-        dummy_row[0, 3] = predicted_price
-        predicted_price = 0
-        #scaler.inverse_transform(dummy_row)[0][3]
-        logging.info(f"LSTM Prediction for {symbol}: {predicted_price}, Current Price: {current_price}")
+        # logging.info(f"LSTM Prediction for {symbol}: {predicted_price}, Current Price: {current_price}")
 
         position_size = ((POSITION_SIZE_PERCENT) * balance) / current_price
         position_size = position_size * LEVERAGE
         position_size = validate_position_size(symbol, position_size, current_price)
+
         atr = data['ATR'].iloc[-1]
         buy_threshold = 1
-        #1.002 + (atr / current_price * 0.005)  # Adjust by 10% of ATR
         sell_threshold = 1
-        #0.998 - (atr / current_price * 0.005)
 
         crossover_signal = detect_crossover(data)
         signal = detect_breakout_patterns(symbol=symbol)
@@ -897,35 +1247,63 @@ def should_trade(symbol, model, scaler, data, balance):
             if confidence >= 4:
                 pattern_breakout = direction
 
-        logging.info(f"Trade conditions for {symbol} - Predicted: {predicted_price}, Current: {current_price}, MA_10: {data['MA_10'].iloc[-1]}, MA_30: {data['MA_30'].iloc[-1]}, RSI: {data['RSI'].iloc[-1]} , MACD : {data['MACD'].iloc[-1]}, Signal {data['Signal'].iloc[-1]} , ATR Confimation {confirm_trade_signal_with_atr(symbol=symbol)}")
+        # Define model path
+        model_path = f"models/ppo_trading_{symbol.replace('/', '_')}.zip"
+
+        # Create trading environment
+        env = CryptoTradingEnv(symbol=symbol, exchange=exchange)
+
+        # Check if model exists
+        if os.path.exists(model_path):
+            model_mtime = os.path.getmtime(model_path)  # Get last modified time
+            age_hours = (time.time() - model_mtime) / 3600  # Convert age to hours
+
+            # Retrain if model is older than 24 hours
+            if age_hours < 24:
+                logging.info(f"✅ Model found for {symbol} (last trained {age_hours:.2f} hours ago). Loading existing model...")
+                model = PPO.load(model_path, env=env)
+            else:
+                logging.info(f"⚠️ Model for {symbol} is older than 24 hours. Retraining...")
+                model = PPO("MlpPolicy", env, verbose=1)
+                model.learn(total_timesteps=10000)
+                model.save(model_path)
+        else:
+            logging.info(f"🚀 No model found for {symbol}. Training new model...")
+            model = PPO("MlpPolicy", env, verbose=1)
+            model.learn(total_timesteps=10000)
+            model.save(model_path)  # Save the
+
+        obs = env.get_observation()  # Get real-time market data
+        action, _ = model.predict(obs)
+        trade_action = ["Hold", "Buy", "Sell"][action]
+
+        logging.info(f"trade_action {trade_action}")
+        logging.info(f"Trade conditions for {symbol} - Predicted: {predicted_price}, Current: {current_price}, MA_10: {data['MA_10'].iloc[-1]}, MA_30: {data['MA_30'].iloc[-1]}, RSI: {data['RSI'].iloc[-1]}, MACD: {data['MACD'].iloc[-1]}, Signal: {data['Signal'].iloc[-1]}, ATR Confirmation: {confirm_trade_signal_with_atr(symbol=symbol)}")
         logging.info(f"buy threshold {buy_threshold} - sell threshold {sell_threshold}")
         logging.info(f"cross over signal {crossover_signal}")
 
         # Buy Condition
-        if (
-            (
-                support_resistance_signal_new(symbol=symbol) == 'buy'
-                #or pattern_breakout == 'buy'
-            )
-            and (data['MACD'].iloc[-1] > 0)  # Apply MACD condition properly
-        ):
+        if ((
+            
+             support_resistance_signal_new(symbol=symbol) == 'buy' 
+             and (data['MACD'].iloc[-1] > 0))
+            or trade_action == 'buy'):
             return 'buy', position_size
 
         # Sell Condition
         elif (
-            (
-                support_resistance_signal_new(symbol=symbol) == 'sell'
-                #or pattern_breakout == 'sell'
-            )
-            and (data['MACD'].iloc[-1] < 0)  # Apply MACD condition properly
-        ):
+            ((
+             support_resistance_signal_new(symbol=symbol) == 'sell')
+             and (data['MACD'].iloc[-1] < 0))
+        or trade_action == 'sell'):
             return 'sell', position_size
 
-
         return None, 0
+
     except Exception as e:
         logging.error(f"Error determining trade signal for {symbol}: {e}")
         return None, 0
+
 
 def monitor_positions():
     """
@@ -1020,11 +1398,11 @@ def monitor_positions():
 
 
                 # 3️⃣ Full Stop-Loss at -30% → Force Close
-                if float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.6:
-                    logging.info(f"Hard stop-loss hit for {symbol}. Forcing close at -10%.")
+                if float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.3:
+                    logging.info(f"Hard stop-loss hit for {symbol}. Forcing close at -30%.")
                     close_position()
                     continue
-                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.5:
+                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.2:
                     logging.info(f"{symbol} hit -20% loss. Checking if we should close or hold.")
 
                     if position_side == 'long':
@@ -1068,7 +1446,7 @@ def monitor_positions():
 #new Trade Logic
 last_trade_time = {}
 cooldown_period = 240  # 4-minute cooldown between trades on the same symbol
-max_retries = 4
+max_retries = 2
 retry_counter = {}
 
 # Main Trading Function
@@ -1080,6 +1458,11 @@ def trade():
             balance = fetch_wallet_balance()
 
             if balance > 0:
+                TRADING_PAIRS = (fetch_top_movers())
+                if not TRADING_PAIRS:
+                    logging.info("No trading pairs available. Retrying...")
+                    time.sleep(60)
+                    continue
                 for symbol in TRADING_PAIRS:
                     logging.info(f"Processing pair: {symbol}")
 
