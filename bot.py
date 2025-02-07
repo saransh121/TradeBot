@@ -1413,6 +1413,7 @@ def monitor_positions():
                     obs = env.get_observation() 
                     action, _ = model.predict(obs)
                     trade_action = ["Hold", "buy", "sell"][action]
+                    logging.info(f"Model prediction for the  coin {symbol} is {trade_action}")
                 
                 except Exception as e:
                     logging.error(f"Monitor Trade Loading model exception {e} , setting trade_action to empty")
