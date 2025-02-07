@@ -1385,12 +1385,12 @@ def monitor_positions():
                 dynamic_multiplier = (atr / current_price) * sensitivity_factor
                 
                 # Buffer based on ATR
-                buffer = max(atr * dynamic_multiplier, 0.00007)
+                buffer = max(atr * dynamic_multiplier, current_price * 0.002)
                 
                 #max(atr * dynamic_multiplier, 0.0001)  # Adjust multiplier as needed (e.g., 0.5x ATR)
                 unrealized_profit = float(position['unrealizedPnl'])
                 notional_value = float(position['initialMargin'])
-                dynamic_profit_target = max(0.03, min(0.25, atr / notional_value * (LEVERAGE / 10)))
+                dynamic_profit_target = max(0.1, min(0.3, atr / notional_value * (LEVERAGE / 10)))
                 logging.info(f"dynamic profit target for the coin {symbol} is {dynamic_profit_target}")
 
                 # Function to close position and cancel stop-loss
@@ -1406,12 +1406,24 @@ def monitor_positions():
                         if order['type'] == 'stop_market':
                             logging.info(f"Cancelling stop-loss order for {symbol}: {order['id']}")
                             exchange.cancel_order(order['id'], symbol)
+                try:
+                    model_path = f"models/ppo_trading_{symbol.replace('/', '_')}.zip"
+                    env = CryptoTradingEnv(symbol=symbol, exchange=exchange)
+                    model = PPO.load(model_path, env=env)
+                    obs = env.get_observation() 
+                    action, _ = model.predict(obs)
+                    trade_action = ["Hold", "buy", "sell"][action]
                 
+                except Exception as e:
+                    logging.error(f"Monitor Trade Loading model exception {e} , setting trade_action to empty")
+                    trade_action = ''
+                
+
                 # 1️⃣ Previous Close + Current Open with ATR Buffer → Close Position
                 if unrealized_profit >= notional_value * 0.025:  # Ensure the position is in profit
-                    if position_side == 'long':
+                    if position_side == 'long' and trade_action != 'Hold':
                         # 1️⃣ Check for trend reversal (bearish red candle for long)
-                        if prev_candle[4] > (current_price + buffer):  # Previous close > Current open
+                        if trade_action == 'sell':  # Previous close > Current open
                             logging.info(f"Reversal detected for {symbol} (long position). Closing position.")
                             close_position()
                             continue
@@ -1424,9 +1436,9 @@ def monitor_positions():
                             # 3️⃣ Hold position if trend continues
                             logging.info(f"Trend continues for {symbol} (long position). Holding position.")
 
-                    elif position_side == 'short':
+                    elif position_side == 'short' and trade_action != 'Hold' :
                         # 1️⃣ Check for trend reversal (bullish green candle for short)
-                        if prev_candle[4] < (current_price -buffer):  # Previous close < Current open
+                        if trade_action == 'buy':  # Previous close < Current open
                             logging.info(f"Reversal detected for {symbol} (short position). Closing position.")
                             close_position()
                             continue
@@ -1441,11 +1453,11 @@ def monitor_positions():
 
 
                 # 3️⃣ Full Stop-Loss at -30% → Force Close
-                if float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.3:
+                if float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.35:
                     logging.info(f"Hard stop-loss hit for {symbol}. Forcing close at -30%.")
                     close_position()
                     continue
-                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.2:
+                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.25:
                     logging.info(f"{symbol} hit -20% loss. Checking if we should close or hold.")
 
                     if position_side == 'long':
