@@ -1326,19 +1326,19 @@ def should_trade(symbol, model, scaler, data, balance):
         logging.info(f"cross over signal {crossover_signal}")
 
         # Buy Condition
-        if ((
+        if (
             
-             support_resistance_signal_new(symbol=symbol) == 'buy' 
-             and (data['MACD'].iloc[-1] > 0))
-            or trade_action == 'buy'):
+            #  support_resistance_signal_new(symbol=symbol) == 'buy' 
+            #  and (data['MACD'].iloc[-1] > 0))
+             trade_action == 'buy'):
             return 'buy', position_size
 
         # Sell Condition
         elif (
-            ((
-             support_resistance_signal_new(symbol=symbol) == 'sell')
-             and (data['MACD'].iloc[-1] < 0))
-        or trade_action == 'sell'):
+            # ((
+            #  support_resistance_signal_new(symbol=symbol) == 'sell')
+            #  and (data['MACD'].iloc[-1] < 0))
+         trade_action == 'sell'):
             return 'sell', position_size
 
         return None, 0
