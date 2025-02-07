@@ -104,7 +104,7 @@ class CryptoTradingEnv(gym.Env):
     def fetch_data(self):
         """Fetch latest OHLCV and indicators for training."""
         try:
-            ohlcv = self.exchange.fetch_ohlcv(self.symbol, self.timeframe, limit=150)  # Increase limit to 150
+            ohlcv = self.exchange.fetch_ohlcv(self.symbol, self.timeframe, limit=600)  # Increase limit to 150
             data = np.array(ohlcv)
 
             if len(data) < 125:  # Ensure we have at least 125 rows of data
@@ -176,16 +176,55 @@ class CryptoTradingEnv(gym.Env):
         return np.interp(obs, (np.min(obs), np.max(obs)), (-1, 1))  # Normalize between -1 and 1
 
     def get_reward(self, action):
-        """Calculate reward based on profit/loss."""
+        """
+        Optimized reward function:
+        ✅ Encourages profitable trades  
+        ✅ Penalizes unnecessary trades & overtrading  
+        ✅ Adjusts rewards based on market volatility  
+        ✅ Avoids large drawdowns  
+        """
+
+        if self.current_step == 0:
+            return 0  # No reward for first step
+
+        # Price movement (Change in closing price)
         price_change = self.data[self.current_step, 0] - self.data[self.current_step - 1, 0]
 
-        if action == 1:  # Buy
+        # ATR (Average True Range) for volatility-adjusted rewards
+        atr = self.calculate_atr_rl(self.data, period=14)[-1]  # Ensure a scalar value
+
+        # Normalize ATR (Avoid division by zero)
+        atr = max(atr, 1e-6)  # Smallest possible value
+
+        # Track position: 1 (Long), -1 (Short), 0 (No position)
+        position_size = max(abs(self.position), 1)  # Ensure at least 1 for scaling
+
+        # Base reward (scaled by position size)
+        raw_reward = price_change * position_size * 100
+
+        # 🟢 **Risk-Adjusted Reward**
+        risk_adjusted_reward = raw_reward / (atr * 10)  # ATR-based normalization
+
+        # 🔴 **Penalty for Large Losses**
+        if risk_adjusted_reward < -1:  # Only apply to extreme cases
+            risk_adjusted_reward *= 1.2  # Less aggressive penalty
+
+        # 🟠 **Encourage Trend Following**
+        if action == 0 and self.current_step >= 5:  # HOLD (avoid IndexError)
+            trend = self.data[self.current_step, 0] - self.data[self.current_step - 5, 0]
+            if abs(trend) > atr * 1.5:  # Strong trend detected
+                return 0.2  # Reward for holding in strong trends
+
+        # 🟣 **Final Action-Based Reward**
+        if action == 1:  # BUY
             self.position = 1
-            return price_change * 100
-        elif action == 2:  # Sell
+            return risk_adjusted_reward
+        elif action == 2:  # SELL
             self.position = -1
-            return -price_change * 100
-        return 0  # Hold action has no reward
+            return -risk_adjusted_reward  # Inverse reward for short trades
+
+        return 0  # Default case
+
 
     def calculate_rsi_rl(self, prices, period=14):
         """Calculate Relative Strength Index (RSI)."""
@@ -276,7 +315,7 @@ class CryptoTradingEnv(gym.Env):
 
 def fetch_top_movers(limit=11):
     """
-    Fetch top high-volume coins based on 24h trading volume.
+    Fetch top high-volume coins based on 24h trading volume and filter coins priced below $10.
 
     :param limit: Number of coins to return.
     :return: List of selected trading pairs.
@@ -286,9 +325,12 @@ def fetch_top_movers(limit=11):
 
         volume_list = []
         for symbol, data in tickers.items():
-            if "USDT" in symbol and isinstance(data, dict) and 'quoteVolume' in data:
+            if "USDT" in symbol and isinstance(data, dict) and 'quoteVolume' in data and 'last' in data:
                 volume = float(data['quoteVolume'])  # 24h trading volume in quote currency
-                volume_list.append((symbol, volume))
+                price = float(data['last'])  # Current price of the asset
+                
+                if price < 10:  # Only select coins priced below $10
+                    volume_list.append((symbol, volume))
 
         # Sort by highest volume
         volume_list = sorted(volume_list, key=lambda x: x[1], reverse=True)
@@ -296,12 +338,13 @@ def fetch_top_movers(limit=11):
         # Select top `limit` symbols
         top_symbols = [symbol for symbol, _ in volume_list[:limit]]
 
-        logging.info(f"Top high-volume coins selected: {top_symbols}")
+        logging.info(f"Top high-volume coins (below $10) selected: {top_symbols}")
         return top_symbols
 
     except Exception as e:
         logging.error(f"Error fetching high-volume coins: {e}")
         return []
+
 
 
 
@@ -1265,12 +1308,12 @@ def should_trade(symbol, model, scaler, data, balance):
             else:
                 logging.info(f"⚠️ Model for {symbol} is older than 24 hours. Retraining...")
                 model = PPO("MlpPolicy", env, verbose=1)
-                model.learn(total_timesteps=10000)
+                model.learn(total_timesteps=100000)
                 model.save(model_path)
         else:
             logging.info(f"🚀 No model found for {symbol}. Training new model...")
             model = PPO("MlpPolicy", env, verbose=1)
-            model.learn(total_timesteps=10000)
+            model.learn(total_timesteps=100000)
             model.save(model_path)  # Save the
 
         obs = env.get_observation()  # Get real-time market data
