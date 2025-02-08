@@ -104,7 +104,7 @@ class CryptoTradingEnv(gym.Env):
     def fetch_data(self):
         """Fetch latest OHLCV and indicators for training."""
         try:
-            ohlcv = self.exchange.fetch_ohlcv(self.symbol, self.timeframe, limit=600)  # Increase limit to 150
+            ohlcv = self.exchange.fetch_ohlcv(self.symbol, self.timeframe, limit=1000)  # Increase limit to 150
             data = np.array(ohlcv)
 
             if len(data) < 125:  # Ensure we have at least 125 rows of data
@@ -1306,7 +1306,7 @@ def should_trade(symbol, model, scaler, data, balance):
                 logging.info(f"✅ Model found for {symbol} (last trained {age_hours:.2f} hours ago). Loading existing model...")
                 model = PPO.load(model_path, env=env)
             else:
-                logging.info(f"⚠️ Model for {symbol} is older than 24 hours. Retraining...")
+                logging.info(f"⚠️ Model for {symbol} is older than 8 hours. Retraining...")
                 model = PPO("MlpPolicy", env, verbose=1)
                 model.learn(total_timesteps=100000)
                 model.save(model_path)
