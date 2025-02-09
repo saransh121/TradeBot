@@ -1299,7 +1299,7 @@ def should_trade(symbol, model, scaler, data, balance):
                         vf_coef=0.5,  # Strengthens value function updates
                         max_grad_norm=0.5,  # Prevents unstable updates
                         batch_size=128,  # Larger batch size for better generalization
-                        n_epochs=15,  # More epochs for better learning updates
+                        n_epochs=25,  # More epochs for better learning updates
                         tensorboard_log="./ppo_logs/",  # Enables TensorBoard logging
                     )
             model.learn(total_timesteps=105500)
