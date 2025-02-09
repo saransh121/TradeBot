@@ -1276,11 +1276,11 @@ def should_trade(symbol, model, scaler, data, balance):
                         gamma=0.98,  # Helps balance short vs long-term rewards
                         gae_lambda=0.9,  # Adjusts advantage estimation
                         clip_range=0.2,  # Stabilizes training by limiting updates
-                        ent_coef=0.03,  # Encourages exploration
+                        ent_coef=0.025,  # Encourages exploration
                         vf_coef=0.7,  # Strengthens value function updates
                         max_grad_norm=0.5,  # Prevents unstable updates
                         batch_size=128,  # Larger batch size for better generalization
-                        n_epochs=30,  # More epochs for better learning updates
+                        n_epochs=25,  # More epochs for better learning updates
                         tensorboard_log="./ppo_logs/",  # Enables TensorBoard logging
                     )
                 model.learn(total_timesteps=155500)
@@ -1295,11 +1295,11 @@ def should_trade(symbol, model, scaler, data, balance):
                         gamma=0.98,  # Helps balance short vs long-term rewards
                         gae_lambda=0.9,  # Adjusts advantage estimation
                         clip_range=0.2,  # Stabilizes training by limiting updates
-                        ent_coef=0.03,  # Encourages exploration
+                        ent_coef=0.025,  # Encourages exploration
                         vf_coef=0.7,  # Strengthens value function updates
                         max_grad_norm=0.5,  # Prevents unstable updates
                         batch_size=128,  # Larger batch size for better generalization
-                        n_epochs=30,  # More epochs for better learning updates
+                        n_epochs=25,  # More epochs for better learning updates
                         tensorboard_log="./ppo_logs/",  # Enables TensorBoard logging
                     )
             model.learn(total_timesteps=155500)
