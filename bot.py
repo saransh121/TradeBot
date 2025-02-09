@@ -58,6 +58,9 @@ import logging
 import time
 
 class CryptoTradingEnv(gym.Env):
+    LEVERAGE = 10  # 20x Leverage
+    TRADING_FEE_PERCENT = 0.04 / 100  # 0.04% Taker Fee (Binance)
+
     def __init__(self, exchange, symbol, timeframe='15m'):
         super(CryptoTradingEnv, self).__init__()
 
@@ -65,10 +68,10 @@ class CryptoTradingEnv(gym.Env):
         self.symbol = symbol
         self.timeframe = timeframe
 
-        # 3 Actions: Hold (0), Buy (1), Sell (2)
+        # Actions: Hold (0), Buy (1), Sell (2)
         self.action_space = spaces.Discrete(3)
 
-        # 10 Features: Closing price, volume, RSI, MACD, ATR, Bollinger, EMA, etc.
+        # Features: Closing price, volume, RSI, MACD, ATR, Bollinger, EMA, etc.
         self.observation_space = spaces.Box(low=-1, high=1, shape=(10,), dtype=np.float32)
 
         self.current_step = 0
@@ -76,65 +79,30 @@ class CryptoTradingEnv(gym.Env):
         self.balance = 100  # Simulated starting balance
         self.position = 0  # 0: No position, 1: Long, -1: Short
 
-    # def fetch_data(self):
-    #     """Fetch latest OHLCV and indicators for training."""
-    #     try:
-    #         ohlcv = self.exchange.fetch_ohlcv(self.symbol, self.timeframe, limit=100)
-    #         data = np.array(ohlcv)
-            
-    #         # Extract OHLCV features
-    #         close = data[:, 4]  # Closing price
-    #         volume = data[:, 5]  # Volume
-
-    #         # Technical indicators
-    #         rsi = self.calculate_rsi(close)
-    #         macd, signal = self.calculate_macd(close)
-    #         atr = self.calculate_atr(data)
-    #         ema_50 = self.calculate_ema(close, 50)
-    #         ema_200 = self.calculate_ema(close, 200)
-    #         upper_band, lower_band = self.calculate_bollinger_bands(close)
-
-    #         indicators = np.column_stack((close, volume, rsi, macd, signal, atr, ema_50, ema_200, upper_band, lower_band))
-    #         return indicators
-
-    #     except Exception as e:
-    #         logging.error(f"Error fetching data for {self.symbol}: {e}")
-    #         return np.zeros((100, 10))  # Return zeros if error
-
     def fetch_data(self):
         """Fetch latest OHLCV and indicators for training."""
         try:
-            ohlcv = self.exchange.fetch_ohlcv(self.symbol, self.timeframe, limit=1000)  # Increase limit to 150
+            ohlcv = self.exchange.fetch_ohlcv(self.symbol, self.timeframe, limit=1000)
             data = np.array(ohlcv)
 
-            if len(data) < 125:  # Ensure we have at least 125 rows of data
+            if len(data) < 125:
                 logging.warning(f"Not enough historical data for {self.symbol}. Required: 125, Available: {len(data)}")
-                return None  # Return None if there's not enough data
+                return None
 
             # Extract OHLCV features
-            close = data[:, 4]  # Closing price
-            volume = data[:, 5]  # Volume
+            close = data[:, 4]
+            volume = data[:, 5]
 
-            # Compute indicators with logging
+            # Compute indicators
             rsi = self.calculate_rsi_rl(close)
-
             macd, signal = self.calculate_macd_rl(close)
-
             atr = self.calculate_atr_rl(data)
-
             ema_50 = self.calculate_ema_rl(close, 50)
-
             ema_200 = self.calculate_ema_rl(close, 200)
-
             upper_band, lower_band = self.calculate_bollinger_bands_rl(close)
 
-            # Find the **minimum** length across all indicators
-            min_length = min(
-                len(close), len(volume), len(rsi), len(macd), len(signal), len(atr),
-                len(ema_50), len(ema_200), len(upper_band), len(lower_band)
-            )
-
-            # Trim all arrays to match `min_length`
+            # Ensure all indicators have the same length
+            min_length = min(len(close), len(volume), len(rsi), len(macd), len(signal), len(atr), len(ema_50), len(ema_200), len(upper_band), len(lower_band))
             close, volume = close[-min_length:], volume[-min_length:]
             rsi, macd, signal = rsi[-min_length:], macd[-min_length:], signal[-min_length:]
             atr, ema_50, ema_200 = atr[-min_length:], ema_50[-min_length:], ema_200[-min_length:]
@@ -147,10 +115,7 @@ class CryptoTradingEnv(gym.Env):
 
         except Exception as e:
             logging.error(f"Error fetching data for {self.symbol}: {e}")
-            return None  # Return None to indicate failure
-
-
-
+            return None
 
     def step(self, action):
         """Perform an action and return the new state, reward, and done flag."""
@@ -173,57 +138,53 @@ class CryptoTradingEnv(gym.Env):
     def get_observation(self):
         """Return real-time indicators (normalized between -1 and 1)."""
         obs = self.data[self.current_step] if self.current_step < len(self.data) else np.zeros(10)
-        return np.interp(obs, (np.min(obs), np.max(obs)), (-1, 1))  # Normalize between -1 and 1
+        return np.interp(obs, (np.min(obs), np.max(obs)), (-1, 1))
 
     def get_reward(self, action):
-        """
-        Optimized reward function:
-        ✅ Encourages profitable trades  
-        ✅ Penalizes unnecessary trades & overtrading  
-        ✅ Adjusts rewards based on market volatility  
-        ✅ Avoids large drawdowns  
-        """
-
+        """Reward function considering leverage and trading fees."""
         if self.current_step == 0:
-            return 0  # No reward for first step
+            return 0  # No reward for the first step
 
-        # Price movement (Change in closing price)
-        price_change = self.data[self.current_step, 0] - self.data[self.current_step - 1, 0]
+        # **Price movement calculation**
+        price_change = (self.data[self.current_step, 0] - self.data[self.current_step - 1, 0])
 
-        # ATR (Average True Range) for volatility-adjusted rewards
-        atr = self.calculate_atr_rl(self.data, period=14)[-1]  # Ensure a scalar value
+        # **ATR-based volatility adjustment**
+        atr = self.calculate_atr_rl(self.data, period=14)[-1]
+        atr = max(atr, 1e-6)  # Avoid division by zero
 
-        # Normalize ATR (Avoid division by zero)
-        atr = max(atr, 1e-6)  # Smallest possible value
+        # **Trading fee per trade**
+        trading_fee = 0
+        if action in [1, 2]:  # Buy or Sell
+            trading_fee = abs(price_change) * self.LEVERAGE * self.TRADING_FEE_PERCENT  # Apply fee
 
-        # Track position: 1 (Long), -1 (Short), 0 (No position)
-        position_size = max(abs(self.position), 1)  # Ensure at least 1 for scaling
+        # **Leverage application only on buy/sell actions**
+        price_change *= self.LEVERAGE if action in [1, 2] else 1
 
-        # Base reward (scaled by position size)
-        raw_reward = price_change * position_size * 100
+        # **Final adjusted reward**
+        raw_reward = (price_change * 100) - trading_fee  # Fee deducted only for trades
 
-        # 🟢 **Risk-Adjusted Reward**
-        risk_adjusted_reward = raw_reward / (atr * 10)  # ATR-based normalization
+        # **Risk-adjusted reward**
+        risk_adjusted_reward = raw_reward / (atr * 10)
 
-        # 🔴 **Penalty for Large Losses**
-        if risk_adjusted_reward < -1:  # Only apply to extreme cases
-            risk_adjusted_reward *= 1.2  # Less aggressive penalty
+        # **Penalty for Large Losses**
+        if risk_adjusted_reward < -1:
+            risk_adjusted_reward *= 1.2  # Apply a larger penalty
 
-        # 🟠 **Encourage Trend Following**
-        if action == 0 and self.current_step >= 5:  # HOLD (avoid IndexError)
+        # **Encourage Holding in Strong Trends**
+        if action == 0 and self.current_step >= 5:
             trend = self.data[self.current_step, 0] - self.data[self.current_step - 5, 0]
-            if abs(trend) > atr * 1.5:  # Strong trend detected
-                return 0.2  # Reward for holding in strong trends
+            if abs(trend) > atr * 1.5:
+                return 0.3  # Increased reward for strong trend holding
 
-        # 🟣 **Final Action-Based Reward**
+        # **Final Reward Adjustment Based on Action**
         if action == 1:  # BUY
             self.position = 1
             return risk_adjusted_reward
         elif action == 2:  # SELL
             self.position = -1
-            return -risk_adjusted_reward  # Inverse reward for short trades
+            return -risk_adjusted_reward
 
-        return 0  # Default case
+        return 0
 
 
     def calculate_rsi_rl(self, prices, period=14):
@@ -313,7 +274,7 @@ class CryptoTradingEnv(gym.Env):
 
 
 
-def fetch_top_movers(limit=11):
+def fetch_top_movers(limit=6):
     """
     Fetch top high-volume coins based on 24h trading volume and filter coins priced below $10.
 
@@ -1302,11 +1263,11 @@ def should_trade(symbol, model, scaler, data, balance):
             age_hours = (time.time() - model_mtime) / 3600  # Convert age to hours
 
             # Retrain if model is older than 24 hours
-            if age_hours < 4:
+            if age_hours < 6:
                 logging.info(f"✅ Model found for {symbol} (last trained {age_hours:.2f} hours ago). Loading existing model...")
                 model = PPO.load(model_path, env=env)
             else:
-                logging.info(f"⚠️ Model for {symbol} is older than 8 hours. Retraining...")
+                logging.info(f"⚠️ Model for {symbol} is older than 6 hours. Retraining...")
                 model = PPO("MlpPolicy", env, verbose=1)
                 model.learn(total_timesteps=100000)
                 model.save(model_path)
