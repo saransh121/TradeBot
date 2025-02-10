@@ -1343,8 +1343,8 @@ def should_trade(symbol, model, scaler, data, balance):
 
         # Create trading environment
         env = CryptoTradingEnv(symbol=symbol, exchange=exchange)
-        # env = DummyVecEnv([lambda: env])
-        # env = VecNormalize(env, norm_obs=True, norm_reward=True)
+        env = DummyVecEnv([lambda: env])
+        env = VecNormalize(env, norm_obs=True, norm_reward=True)
         # env = Monitor(env)
         # Check if model exists
         if os.path.exists(model_path):
@@ -1352,7 +1352,7 @@ def should_trade(symbol, model, scaler, data, balance):
             age_hours = (time.time() - model_mtime) / 3600  # Convert age to hours
 
             # Retrain if model is older than 24 hours
-            if age_hours < 7:
+            if age_hours < 6:
                 logging.info(f"✅ Model found for {symbol} (last trained {age_hours:.2f} hours ago). Loading existing model...")
                 model = PPO.load(model_path, env=env)
             else:
@@ -1444,7 +1444,7 @@ def should_trade(symbol, model, scaler, data, balance):
                 # model.learn(total_timesteps=155500)
             model.save(model_path)
 
-        obs = env.get_observation()  # Get real-time market data
+        obs = env.reset()  # Get real-time market data
         action, _ = model.predict(obs)
         trade_action = ["Hold", "buy", "sell"][action]
 
@@ -1537,9 +1537,11 @@ def monitor_positions():
                 try:
                     model_path = f"models/ppo_trading_{symbol.replace('/', '_')}.zip"
                     env = CryptoTradingEnv(symbol=symbol, exchange=exchange)
+                    env = DummyVecEnv([lambda: env])
+                    env = VecNormalize(env, norm_obs=True, norm_reward=True)
                     model = PPO.load(model_path, env=env)
-                    obs = env.get_observation() 
-                    action, _ = model.predict(obs)
+                    obs = env.reset() 
+                    action, _ = model.predict(obs,deterministic=True)
                     trade_action = ["Hold", "buy", "sell"][action]
                     logging.info(f"Model prediction for the  coin {symbol} is {trade_action}")
                 
