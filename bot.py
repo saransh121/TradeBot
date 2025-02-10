@@ -1340,7 +1340,6 @@ def should_trade(symbol, model, scaler, data, balance):
 
         # Define model path
         model_path = f"models/ppo_trading_{symbol.replace('/', '_')}.zip"
-
         # Create trading environment
         env = CryptoTradingEnv(symbol=symbol, exchange=exchange)
         env = DummyVecEnv([lambda: env])
@@ -1352,11 +1351,13 @@ def should_trade(symbol, model, scaler, data, balance):
             age_hours = (time.time() - model_mtime) / 3600  # Convert age to hours
 
             # Retrain if model is older than 24 hours
-            if age_hours < 6:
+            if age_hours < 24:
                 logging.info(f"✅ Model found for {symbol} (last trained {age_hours:.2f} hours ago). Loading existing model...")
+                logging.info("model_path befoe")
                 model = PPO.load(model_path, env=env)
+                logging.info("model_path after")
             else:
-                logging.info(f"⚠️ Model for {symbol} is older than 6 hours. Retraining...")
+                logging.info(f"⚠️ Model for {symbol} is older than 24 hours. Retraining...")
                 
                 # Early stopping callback
                 stop_callback = StopTrainingOnNoModelImprovement(
@@ -1446,7 +1447,7 @@ def should_trade(symbol, model, scaler, data, balance):
 
         obs = env.reset()  # Get real-time market data
         action, _ = model.predict(obs)
-        logging.info(f"action------{action}")
+        action = int(action[0])
         trade_action = ["Hold", "buy", "sell"][action]
 
         logging.info(f"trade_action {trade_action}")
@@ -1543,6 +1544,7 @@ def monitor_positions():
                     model = PPO.load(model_path, env=env)
                     obs = env.reset() 
                     action, _ = model.predict(obs,deterministic=True)
+                    action = int(action[0])
                     trade_action = ["Hold", "buy", "sell"][action]
                     logging.info(f"Model prediction for the  coin {symbol} is {trade_action}")
                 
@@ -1585,11 +1587,11 @@ def monitor_positions():
 
 
                 # 3️⃣ Full Stop-Loss at -30% → Force Close
-                if float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.35:
+                if float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.3:
                     logging.info(f"Hard stop-loss hit for {symbol}. Forcing close at -30%.")
                     close_position()
                     continue
-                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.25:
+                elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.2:
                     logging.info(f"{symbol} hit -20% loss. Checking if we should close or hold.")
 
                     if position_side == 'long':
