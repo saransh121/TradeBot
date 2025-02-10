@@ -1446,6 +1446,7 @@ def should_trade(symbol, model, scaler, data, balance):
 
         obs = env.reset()  # Get real-time market data
         action, _ = model.predict(obs)
+        logging.info(f"action------{action}")
         trade_action = ["Hold", "buy", "sell"][action]
 
         logging.info(f"trade_action {trade_action}")
