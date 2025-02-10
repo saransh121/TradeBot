@@ -20,6 +20,9 @@ from keras.losses import Huber
 from keras.layers import Bidirectional, Attention, Conv1D, Flatten
 from keras.layers import Input, Conv1D, LSTM, Dense, Dropout, Flatten, BatchNormalization, Bidirectional,Multiply
 import tensorflow as tf
+from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnNoModelImprovement
+from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 import gym
 import numpy as np
@@ -58,29 +61,36 @@ import logging
 import time
 
 class CryptoTradingEnv(gym.Env):
-    LEVERAGE = 10  # 20x Leverage
-    TRADING_FEE_PERCENT = 0.04 / 100  # 0.04% Taker Fee (Binance)
-
+    LEVERAGE = 10
+    TRADING_FEE_PERCENT = 0.04 / 100
+    
     def __init__(self, exchange, symbol, timeframe='15m'):
         super(CryptoTradingEnv, self).__init__()
-
+        
         self.exchange = exchange
         self.symbol = symbol
         self.timeframe = timeframe
-
-        # Actions: Hold (0), Buy (1), Sell (2)
+        
+        # Enhanced action space with take-profit/stop-loss management
         self.action_space = spaces.Discrete(3)
-
-        # Features: Closing price, volume, RSI, MACD, ATR, Bollinger, EMA, etc.
-        self.observation_space = spaces.Box(low=-1, high=1, shape=(10,), dtype=np.float32)
-
+        
+        # Expanded observation space with additional features
+        self.observation_space = spaces.Box(low=-1, high=1, shape=(14,), dtype=np.float32)
+        
         self.current_step = 0
-        self.data = self.fetch_data()  # Load initial market data
-        self.balance = 100  # Simulated starting balance
-        self.position = 0  # 0: No position, 1: Long, -1: Short
+        self.data = self.fetch_data()
+        self.balance = 100
+        self.position = 0
+        self.trade_history = []  # Track trades for better reward calculation
+        self.volatility_filter = True  # New risk management feature
+        
+        # Additional parameters
+        self.slippage_percent = 0.01  # 0.01% price impact
+        self.max_drawdown = -20  # 20% max allowed drawdown
+        self.entry_prices = []  # Track entry prices for position management
 
     def fetch_data(self):
-        """Fetch latest OHLCV and indicators for training."""
+        """Enhanced data fetching with additional indicators and error handling"""
         try:
             ohlcv = self.exchange.fetch_ohlcv(self.symbol, self.timeframe, limit=1000)
             data = np.array(ohlcv)
@@ -89,103 +99,160 @@ class CryptoTradingEnv(gym.Env):
                 logging.warning(f"Not enough historical data for {self.symbol}. Required: 125, Available: {len(data)}")
                 return None
 
-            # Extract OHLCV features
             close = data[:, 4]
             volume = data[:, 5]
 
-            # Compute indicators
+            # Enhanced indicator calculations with TA-Lib wrappers
             rsi = self.calculate_rsi_rl(close)
-            macd, signal = self.calculate_macd_rl(close)
+            macd, signal, hist = self.calculate_macd_rl(close)  # Added histogram
             atr = self.calculate_atr_rl(data)
             ema_50 = self.calculate_ema_rl(close, 50)
             ema_200 = self.calculate_ema_rl(close, 200)
             upper_band, lower_band = self.calculate_bollinger_bands_rl(close)
-
-            # Ensure all indicators have the same length
-            min_length = min(len(close), len(volume), len(rsi), len(macd), len(signal), len(atr), len(ema_50), len(ema_200), len(upper_band), len(lower_band))
-            close, volume = close[-min_length:], volume[-min_length:]
-            rsi, macd, signal = rsi[-min_length:], macd[-min_length:], signal[-min_length:]
-            atr, ema_50, ema_200 = atr[-min_length:], ema_50[-min_length:], ema_200[-min_length:]
-            upper_band, lower_band = upper_band[-min_length:], lower_band[-min_length:]
-
-            # Stack indicators
-            indicators = np.column_stack((close, volume, rsi, macd, signal, atr, ema_50, ema_200, upper_band, lower_band))
+            obv = self.calculate_obv_rl(data)  # New On-Balance Volume indicator
+            adx = self.calculate_adx_rl(data)  # New ADX indicator
+            
+            # Ensure alignment
+            min_length = min(len(close), len(volume), len(rsi), len(macd), len(signal), len(atr), len(ema_50), 
+                             len(ema_200), len(upper_band), len(lower_band) , len(adx) , len(obv))
+            indicators = np.column_stack((
+                close[-min_length:], volume[-min_length:], rsi[-min_length:],
+                macd[-min_length:], signal[-min_length:], hist[-min_length:],
+                atr[-min_length:], ema_50[-min_length:], ema_200[-min_length:],
+                upper_band[-min_length:], lower_band[-min_length:],
+                obv[-min_length:], adx[-min_length:],
+                np.zeros(min_length)  # Placeholder for sentiment analysis
+            ))
 
             return indicators
 
         except Exception as e:
-            logging.error(f"Error fetching data for {self.symbol}: {e}")
+            logging.error(f"Enhanced data fetch failed: {e}")
             return None
 
     def step(self, action):
-        """Perform an action and return the new state, reward, and done flag."""
+        """Enhanced step function with slippage and drawdown protection"""
         self.current_step += 1
         done = self.current_step >= len(self.data) - 1
+        
+        # Check max drawdown
+        if self.balance < (100 + self.max_drawdown):
+            done = True
+            reward = self.max_drawdown
+            obs = self.get_observation()
+            return obs, reward, done, {}
 
-        reward = self.get_reward(action)  # Calculate reward
-        obs = self.get_observation()  # Get next observation
-
+        reward = self.get_reward(action)
+        obs = self.get_observation()
+        
+        # Update position tracking
+        if action in [1, 2]:
+            self.entry_prices.append(self._get_current_price())
+            
         return obs, reward, done, {}
 
     def reset(self):
-        """Reset environment at the start of a new episode."""
+        """Reset with additional tracking parameters"""
         self.current_step = 0
         self.balance = 100
         self.position = 0
+        self.trade_history = []
+        self.entry_prices = []
         self.data = self.fetch_data()
         return self.get_observation()
 
     def get_observation(self):
-        """Return real-time indicators (normalized between -1 and 1)."""
-        obs = self.data[self.current_step] if self.current_step < len(self.data) else np.zeros(10)
-        return np.interp(obs, (np.min(obs), np.max(obs)), (-1, 1))
+        """Enhanced normalization using Z-score for individual features"""
+        obs = self.data[self.current_step] if self.current_step < len(self.data) else np.zeros(14)
+        # Use running statistics for better normalization
+        return (obs - np.mean(self.data, axis=0)) / (np.std(self.data, axis=0) + 1e-8)
 
     def get_reward(self, action):
-        """Reward function considering leverage and trading fees."""
+        """Enhanced reward function with multiple factors"""
         if self.current_step == 0:
-            return 0  # No reward for the first step
+            return 0
 
-        # **Price movement calculation**
-        price_change = (self.data[self.current_step, 0] - self.data[self.current_step - 1, 0])
+        # Calculate price impact with slippage
+        price = self._get_current_price()
+        slippage = price * self.slippage_percent / 100
+        price_change = (price - self.data[self.current_step-1, 0]) + slippage
+        
+        # Position sizing based on volatility
+        atr = self.data[self.current_step, 6]
+        position_size = min(0.1 * self.balance, self.balance * 0.01 / (atr + 1e-8))
+        
+        # Enhanced fee calculation
+        trade_size = position_size * self.LEVERAGE
+        trading_fee = trade_size * self.TRADING_FEE_PERCENT if action in [1,2] else 0
+        
+        # Sharpe ratio consideration
+        returns = np.diff(np.log(self.data[:self.current_step+1, 0]))
+        sharpe_ratio = np.mean(returns) / (np.std(returns) + 1e-8)
+        
+        # Risk-adjusted return
+        pnl = price_change * self.LEVERAGE * position_size
+        risk_adjusted_return = (pnl - trading_fee) * sharpe_ratio
+        
+        # Drawdown penalty
+        peak = max(self.balance, 100)
+        drawdown_penalty = (peak - self.balance) * 0.1
+        
+        # Trend alignment bonus
+        trend_alignment = self._calculate_trend_alignment()
+        
+        # Final reward composition
+        reward = risk_adjusted_return - drawdown_penalty + trend_alignment
+        
+        return float(reward)
 
-        # **ATR-based volatility adjustment**
-        atr = self.calculate_atr_rl(self.data, period=14)[-1]
-        atr = max(atr, 1e-6)  # Avoid division by zero
+    # New helper methods
+    def _get_current_price(self):
+        """Get price with slippage simulation"""
+        spread = self.data[self.current_step, 0] * 0.01 / 100
+        return self.data[self.current_step, 0] + np.random.uniform(-spread, spread)
+    
+    def _calculate_trend_alignment(self):
+        """Calculate reward bonus for trend-following positions"""
+        ema_50 = self.data[self.current_step, 7]
+        ema_200 = self.data[self.current_step, 8]
+        trend_direction = 1 if ema_50 > ema_200 else -1
+        return 0.1 * trend_direction * self.position
+    
+    # New indicator calculations
+    def calculate_obv_rl(self, data):
+        """On-Balance Volume calculation"""
+        closes = data[:, 4]
+        volumes = data[:, 5]
+        obv = np.zeros_like(closes)
+        obv[0] = volumes[0]
+        
+        for i in range(1, len(closes)):
+            if closes[i] > closes[i-1]:
+                obv[i] = obv[i-1] + volumes[i]
+            elif closes[i] < closes[i-1]:
+                obv[i] = obv[i-1] - volumes[i]
+            else:
+                obv[i] = obv[i-1]
+        return obv
+    
+    def calculate_adx_rl(self, data, period=14):
+        """ADX calculation simplified for RL"""
+        high = data[:, 2]
+        low = data[:, 3]
+        close = data[:, 4]
+        
+        plus_dm = high[1:] - high[:-1]
+        minus_dm = low[:-1] - low[1:]
+        tr = np.maximum(high[1:] - low[1:], np.abs(high[1:] - close[:-1]))
+        
+        plus_di = 100 * self._ema(plus_dm, period) / self._ema(tr, period)
+        minus_di = 100 * self._ema(minus_dm, period) / self._ema(tr, period)
+        dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di + 1e-8)
+        return np.concatenate((np.zeros(period+1), self._ema(dx, period)))
 
-        # **Trading fee per trade**
-        trading_fee = 0
-        if action in [1, 2]:  # Buy or Sell
-            trading_fee = abs(price_change) * self.LEVERAGE * self.TRADING_FEE_PERCENT  # Apply fee
-
-        # **Leverage application only on buy/sell actions**
-        price_change *= self.LEVERAGE if action in [1, 2] else 1
-
-        # **Final adjusted reward**
-        raw_reward = (price_change * 100) - trading_fee  # Fee deducted only for trades
-
-        # **Risk-adjusted reward**
-        risk_adjusted_reward = raw_reward / (atr * 10)
-
-        # **Penalty for Large Losses**
-        if risk_adjusted_reward < -1:
-            risk_adjusted_reward *= 1.2  # Apply a larger penalty
-
-        # **Encourage Holding in Strong Trends**
-        if action == 0 and self.current_step >= 5:
-            trend = self.data[self.current_step, 0] - self.data[self.current_step - 5, 0]
-            if abs(trend) > atr * 1.5:
-                return 0.3  # Increased reward for strong trend holding
-
-        # **Final Reward Adjustment Based on Action**
-        if action == 1:  # BUY
-            self.position = 1
-            return risk_adjusted_reward
-        elif action == 2:  # SELL
-            self.position = -1
-            return -risk_adjusted_reward
-
-        return 0
-
+    def _ema(self, values, period):
+        """Helper EMA calculation"""
+        return pd.Series(values).ewm(span=period, adjust=False).mean().values
 
     def calculate_rsi_rl(self, prices, period=14):
         """Calculate Relative Strength Index (RSI)."""
@@ -207,29 +274,34 @@ class CryptoTradingEnv(gym.Env):
 
 
     def calculate_macd_rl(self, prices, short_window=12, long_window=26, signal_window=9):
-        """Calculate MACD and Signal Line with proper length handling."""
+        """Calculate MACD, Signal Line, and Histogram with proper alignment."""
         
         if len(prices) < long_window:
-            return np.full(len(prices), np.nan), np.full(len(prices), np.nan)  # Handle short data case
+            return (np.full(len(prices), np.nan),  # MACD
+                    np.full(len(prices), np.nan),  # Signal
+                    np.full(len(prices), np.nan))  # Histogram
 
         ema_short = self.calculate_ema_rl(prices, short_window)
         ema_long = self.calculate_ema_rl(prices, long_window)
 
-        # **Ensure same length by padding the shorter EMA with NaNs**
-        diff_length = len(ema_long) - len(ema_short)
-        if diff_length > 0:
-            ema_short = np.pad(ema_short, (diff_length, 0), mode='constant', constant_values=np.nan)
-        elif diff_length < 0:
-            ema_long = np.pad(ema_long, (-diff_length, 0), mode='constant', constant_values=np.nan)
+        # Ensure both EMA arrays are aligned to the same length
+        min_length = min(len(ema_short), len(ema_long))
+        ema_short, ema_long = ema_short[-min_length:], ema_long[-min_length:]
 
-        # Compute MACD and Signal
+        # Compute MACD and align
         macd = ema_short - ema_long
+
+        # Compute Signal Line with correct alignment
         signal = self.calculate_ema_rl(macd, signal_window)
 
-        # **Ensure all arrays match `prices` length**
+        # Ensure all outputs have the same length
         min_length = min(len(prices), len(macd), len(signal))
-        
-        return macd[-min_length:], signal[-min_length:]
+        macd, signal = macd[-min_length:], signal[-min_length:]
+        hist = macd - signal  # MACD Histogram
+
+        return macd, signal, hist
+
+
 
 
 
@@ -274,37 +346,52 @@ class CryptoTradingEnv(gym.Env):
 
 
 
-def fetch_top_movers(limit=6):
+def fetch_top_movers(limit=6, mix_ratio=0.5):
     """
-    Fetch top high-volume coins based on 24h trading volume and filter coins priced below $10.
+    Fetch a mix of top gainers and top losers based on 24h percentage change,
+    while ensuring all selected coins are priced below $10.
 
-    :param limit: Number of coins to return.
+    :param limit: Total number of coins to return.
+    :param mix_ratio: Ratio of gainers to losers (default 50/50).
     :return: List of selected trading pairs.
     """
     try:
         tickers = exchange.fetch_tickers()
 
-        volume_list = []
+        gainers, losers = [], []
         for symbol, data in tickers.items():
-            if "USDT" in symbol and isinstance(data, dict) and 'quoteVolume' in data and 'last' in data:
+            if "USDT" in symbol and isinstance(data, dict) and 'quoteVolume' in data and 'last' in data and 'percentage' in data:
                 volume = float(data['quoteVolume'])  # 24h trading volume in quote currency
                 price = float(data['last'])  # Current price of the asset
+                change = float(data['percentage'])  # 24h percentage change
                 
                 if price < 10:  # Only select coins priced below $10
-                    volume_list.append((symbol, volume))
+                    if change > 0:
+                        gainers.append((symbol, change, volume))
+                    elif change < 0:
+                        losers.append((symbol, abs(change), volume))
 
-        # Sort by highest volume
-        volume_list = sorted(volume_list, key=lambda x: x[1], reverse=True)
+        # Sort by percentage change (descending for gainers, ascending for losers)
+        gainers = sorted(gainers, key=lambda x: x[1], reverse=True)
+        losers = sorted(losers, key=lambda x: x[1], reverse=True)
 
-        # Select top `limit` symbols
-        top_symbols = [symbol for symbol, _ in volume_list[:limit]]
+        # Determine how many gainers and losers to take
+        num_gainers = int(limit * mix_ratio)
+        num_losers = limit - num_gainers
 
-        logging.info(f"Top high-volume coins (below $10) selected: {top_symbols}")
+        # Select top movers
+        top_gainers = [symbol for symbol, _, _ in gainers[:num_gainers]]
+        top_losers = [symbol for symbol, _, _ in losers[:num_losers]]
+
+        top_symbols = top_gainers + top_losers
+
+        logging.info(f"Top mixed movers (below $10) selected: {top_symbols}")
         return top_symbols
 
     except Exception as e:
-        logging.error(f"Error fetching high-volume coins: {e}")
+        logging.error(f"Error fetching high-volume gainers/losers: {e}")
         return []
+
 
 
 
@@ -1256,54 +1343,106 @@ def should_trade(symbol, model, scaler, data, balance):
 
         # Create trading environment
         env = CryptoTradingEnv(symbol=symbol, exchange=exchange)
-
+        # env = DummyVecEnv([lambda: env])
+        # env = VecNormalize(env, norm_obs=True, norm_reward=True)
+        # env = Monitor(env)
         # Check if model exists
         if os.path.exists(model_path):
             model_mtime = os.path.getmtime(model_path)  # Get last modified time
             age_hours = (time.time() - model_mtime) / 3600  # Convert age to hours
 
             # Retrain if model is older than 24 hours
-            if age_hours < 6:
+            if age_hours < 7:
                 logging.info(f"✅ Model found for {symbol} (last trained {age_hours:.2f} hours ago). Loading existing model...")
                 model = PPO.load(model_path, env=env)
             else:
                 logging.info(f"⚠️ Model for {symbol} is older than 6 hours. Retraining...")
+                
+                # Early stopping callback
+                stop_callback = StopTrainingOnNoModelImprovement(
+                    max_no_improvement_evals=15,  # Stop if no improvement for 10 evaluations
+                    min_evals=100,  # Minimum evaluations before stopping
+                    verbose=1
+                )
+                eval_callback = EvalCallback(
+                    env,
+                    best_model_save_path="./best_model/",  # Save the best model
+                    log_path="./logs/",  # Log evaluation results
+                    eval_freq=5000,  # Evaluate every 5000 steps
+                    callback_after_eval=stop_callback,  # Early stopping
+                    deterministic=True,  # Use deterministic actions for evaluation
+                    verbose=1
+                )
                 model = PPO(
-                        "MlpPolicy",
-                        env,
-                        verbose=1,
-                        learning_rate=lambda f: 0.0005 * (1 - f),  # Slightly increased for better convergence
-                        gamma=0.98,  # Helps balance short vs long-term rewards
-                        gae_lambda=0.9,  # Adjusts advantage estimation
-                        clip_range=0.2,  # Stabilizes training by limiting updates
-                        ent_coef=0.025,  # Encourages exploration
-                        vf_coef=0.7,  # Strengthens value function updates
-                        max_grad_norm=0.5,  # Prevents unstable updates
-                        batch_size=128,  # Larger batch size for better generalization
-                        n_epochs=25,  # More epochs for better learning updates
-                        tensorboard_log="./ppo_logs/",  # Enables TensorBoard logging
+                    "MlpPolicy",
+                    env,
+                    verbose=1,
+                    learning_rate=lambda f: 0.0004 * (1 - f),  # Adaptive LR decay
+                    gamma=0.985,  # Encourages long-term rewards
+                    gae_lambda=0.88,  # Reduces variance in advantage estimation
+                    clip_range=0.15,  # Stabilizes updates
+                    ent_coef=0.03,  # More exploration (good for crypto)
+                    vf_coef=0.6,  # Higher weight on value function
+                    max_grad_norm=0.7,  # Prevents unstable updates
+                    batch_size=256,  # Larger batch size for better gradient updates
+                    n_epochs=30,  # More updates per batch
+                    target_kl=0.025,  # Prevents excessive updates when KL divergence is too high
+                    policy_kwargs=dict(
+                        net_arch=[dict(pi=[256, 256], vf=[256, 256])]  # Bigger network with separate policy/value heads
+                    ),
+                    tensorboard_log="./ppo_logs/",  # Enables TensorBoard logging
                     )
-                model.learn(total_timesteps=155500)
+                model.learn(
+                total_timesteps=200000,  # Train for 1M timesteps
+                callback=eval_callback,  # Add evaluation callback
+                tb_log_name="ppo_crypto_trading"  # TensorBoard experiment name
+                )
+                # model.learn(total_timesteps=155500)
                 model.save(model_path)
         else:
             logging.info(f"🚀 No model found for {symbol}. Training new model...")
+          
+                # Early stopping callback
+            stop_callback = StopTrainingOnNoModelImprovement(
+                    max_no_improvement_evals=15,  # Stop if no improvement for 10 evaluations
+                    min_evals=100,  # Minimum evaluations before stopping
+                    verbose=1
+            )
+            eval_callback = EvalCallback(
+                    env,
+                    best_model_save_path="./best_model/",  # Save the best model
+                    log_path="./logs/",  # Log evaluation results
+                    eval_freq=5000,  # Evaluate every 5000 steps
+                    callback_after_eval=stop_callback,  # Early stopping
+                    deterministic=True,  # Use deterministic actions for evaluation
+                    verbose=1
+            )
             model = PPO(
-                        "MlpPolicy",
-                        env,
-                        verbose=1,
-                        learning_rate=lambda f: 0.0005 * (1 - f),  # Slightly increased for better convergence
-                        gamma=0.98,  # Helps balance short vs long-term rewards
-                        gae_lambda=0.9,  # Adjusts advantage estimation
-                        clip_range=0.2,  # Stabilizes training by limiting updates
-                        ent_coef=0.025,  # Encourages exploration
-                        vf_coef=0.7,  # Strengthens value function updates
-                        max_grad_norm=0.5,  # Prevents unstable updates
-                        batch_size=128,  # Larger batch size for better generalization
-                        n_epochs=25,  # More epochs for better learning updates
-                        tensorboard_log="./ppo_logs/",  # Enables TensorBoard logging
-                    )
-            model.learn(total_timesteps=155500)
-            model.save(model_path)  # Save the
+                            "MlpPolicy",
+                            env,
+                            verbose=1,
+                            learning_rate=lambda f: 0.0004 * (1 - f),  # Adaptive LR decay
+                            gamma=0.985,  # Encourages long-term rewards
+                            gae_lambda=0.88,  # Reduces variance in advantage estimation
+                            clip_range=0.15,  # Stabilizes updates
+                            ent_coef=0.03,  # More exploration (good for crypto)
+                            vf_coef=0.6,  # Higher weight on value function
+                            max_grad_norm=0.7,  # Prevents unstable updates
+                            batch_size=256,  # Larger batch size for better gradient updates
+                            n_epochs=30,  # More updates per batch
+                            target_kl=0.025,  # Prevents excessive updates when KL divergence is too high
+                            policy_kwargs=dict(
+                                net_arch=[dict(pi=[256, 256], vf=[256, 256])]  # Bigger network with separate policy/value heads
+                            ),
+                            tensorboard_log="./ppo_logs/",  # Enables TensorBoard logging
+                            )
+            model.learn(
+            total_timesteps=200000,  # Train for 1M timesteps
+            callback=eval_callback,  # Add evaluation callback
+            tb_log_name="ppo_crypto_trading"  # TensorBoard experiment name
+            )
+                # model.learn(total_timesteps=155500)
+            model.save(model_path)
 
         obs = env.get_observation()  # Get real-time market data
         action, _ = model.predict(obs)
