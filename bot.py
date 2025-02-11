@@ -23,7 +23,6 @@ import tensorflow as tf
 from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnNoModelImprovement
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
-from pykalman import KalmanFilter
 
 import gym
 import numpy as np
@@ -1378,7 +1377,7 @@ def should_trade(symbol, model, scaler, data, balance):
         # Define model path
         model_path = f"models/ppo_trading_{symbol.replace('/', '_')}.zip"
         # Create trading environment
-        env = Monitor(CryptoTradingEnv(symbol=symbol, exchange=exchange))
+        env = CryptoTradingEnv(symbol=symbol, exchange=exchange)
         env = DummyVecEnv([lambda: env])
         env = VecNormalize(env, norm_obs=True, norm_reward=True)
         # env = Monitor(env)
@@ -1575,7 +1574,7 @@ def monitor_positions():
                             exchange.cancel_order(order['id'], symbol)
                 try:
                     model_path = f"models/ppo_trading_{symbol.replace('/', '_')}.zip"
-                    env = Monitor(CryptoTradingEnv(symbol=symbol, exchange=exchange))
+                    env = CryptoTradingEnv(symbol=symbol, exchange=exchange)
                     env = DummyVecEnv([lambda: env])
                     env = VecNormalize(env, norm_obs=True, norm_reward=True)
                     model = PPO.load(model_path, env=env)
