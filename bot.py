@@ -432,7 +432,7 @@ def fetch_top_movers(limit=2):
 
         # Select top `limit` symbols
         top_symbols = [symbol for symbol, _ in volume_list[:limit]]
-        top_symbols = ['TST/USDT:USDT']
+        
         logging.info(f"Top high-volume coins (below $10) selected: {top_symbols}")
         return top_symbols
     except Exception as e:
