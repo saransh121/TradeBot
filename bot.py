@@ -204,10 +204,10 @@ class CryptoTradingEnv(gym.Env):
         reward = risk_adjusted_return - drawdown_penalty + trend_alignment
 
         if action in [1, 2] and price_change < 0:
-            reward -= 0.5 * abs(price_change) # Penalize for false signals
+            reward -= 0.5  # Penalize for false signals
         
         if action == 0 and abs(price_change) > 0.02:  # If price moved significantly
-            reward -= 0.2 * abs(price_change) # Penalize for not taking action
+            reward -= 0.2  # Penalize for not taking action
         return float(reward)
 
     # New helper methods
