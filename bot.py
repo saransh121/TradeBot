@@ -88,9 +88,6 @@ class CryptoTradingEnv(gym.Env):
         self.slippage_percent = 0.01  # 0.01% price impact
         self.max_drawdown = -20  # 20% max allowed drawdown
         self.entry_prices = []  # Track entry prices for position management
-        self.win_rate = 0.55  # Initial win rate estimate # Enable Kalman filtering
-        self.win_loss_ratio = 1.5  # Initial win/loss ratio estimate
-        
 
     def fetch_data(self):
         """Enhanced data fetching with additional indicators and error handling"""
@@ -104,8 +101,7 @@ class CryptoTradingEnv(gym.Env):
 
             close = data[:, 4]
             volume = data[:, 5]
-            
-            
+
             # Enhanced indicator calculations with TA-Lib wrappers
             rsi = self.calculate_rsi_rl(close)
             macd, signal, hist = self.calculate_macd_rl(close)  # Added histogram
@@ -116,21 +112,9 @@ class CryptoTradingEnv(gym.Env):
             obv = self.calculate_obv_rl(data)  # New On-Balance Volume indicator
             adx = self.calculate_adx_rl(data)  # New ADX indicator
             
-
-            # logging.debug(f"Array Shapes: close={close[-min_length:].shape}, volume={volume[-min_length:].shape}, "
-            #   f"rsi={rsi[-min_length:].shape}, macd={macd[-min_length:].shape}, signal={signal[-min_length:].shape}, "
-            #   f"hist={hist[-min_length:].shape}, atr={atr[-min_length:].shape}, ema_50={ema_50[-min_length:].shape}, "
-            #   f"ema_200={ema_200[-min_length:].shape}, upper_band={upper_band[-min_length:].shape}, "
-            #   f"lower_band={lower_band[-min_length:].shape}, obv={obv[-min_length:].shape}, "
-            #   f"adx={adx[-min_length:].shape}, combined_signal={combined_signal[-min_length:].shape}")
-
-            
-
             # Ensure alignment
             min_length = min(len(close), len(volume), len(rsi), len(macd), len(signal), len(atr), len(ema_50), 
                              len(ema_200), len(upper_band), len(lower_band) , len(adx) , len(obv))
-            
-        
             indicators = np.column_stack((
                 close[-min_length:], volume[-min_length:], rsi[-min_length:],
                 macd[-min_length:], signal[-min_length:], hist[-min_length:],
@@ -207,8 +191,7 @@ class CryptoTradingEnv(gym.Env):
         
         # Risk-adjusted return
         pnl = price_change * self.LEVERAGE * position_size
-        risk_adjusted_return = (pnl - trading_fee)
-        #* self.calculate_sortino_ratio(np.diff(np.log(self.data[:self.current_step+1, 0])))
+        risk_adjusted_return = (pnl - trading_fee) * sharpe_ratio
         
         # Drawdown penalty
         peak = max(self.balance, 100)
@@ -216,16 +199,15 @@ class CryptoTradingEnv(gym.Env):
         
         # Trend alignment bonus
         trend_alignment = self._calculate_trend_alignment()
-
+        
         # Final reward composition
         reward = risk_adjusted_return - drawdown_penalty + trend_alignment
 
         if action in [1, 2] and price_change < 0:
-            reward -= 0.5  # Penalize for false signals
+            reward -= 0.5 * abs(price_change) # Penalize for false signals
         
         if action == 0 and abs(price_change) > 0.02:  # If price moved significantly
-            reward -= 0.2  # Penalize for not taking action
-        
+            reward -= 0.2 * abs(price_change) # Penalize for not taking action
         return float(reward)
 
     # New helper methods
@@ -241,46 +223,6 @@ class CryptoTradingEnv(gym.Env):
         trend_direction = 1 if ema_50 > ema_200 else -1
         return 0.1 * trend_direction * self.position
     
-    def combined_signal(self, macd, rsi, volume, signal):
-        """Returns an array of combined signals instead of a single boolean."""
-        
-        # Ensure all arrays have enough data before indexing
-        min_length = min(len(macd), len(signal), len(rsi), len(volume))
-
-        if min_length == 0:
-            logging.warning("combined_signal() WARNING: Not enough data for MACD, RSI, or Volume.")
-            return np.zeros(1)  # Return an array instead of a single boolean
-
-        macd_signal = macd[-min_length:] > signal[-min_length:]  # MACD crossover check
-        rsi_signal = rsi[-min_length:] > 50  # RSI above 50 level
-        volume_signal = volume[-min_length:] > np.mean(volume[-20:])  # Volume above 20-bar average
-
-        # Convert True/False to 0/1 for compatibility with np.column_stack
-        return (macd_signal & rsi_signal & volume_signal).astype(int)
-
-    
-    def calculate_sortino_ratio(self, returns, target_return=0):
-        downside_returns = returns[returns < target_return]
-
-        # Handle empty downside returns
-        if downside_returns.size == 0:
-            return 0  # Return 0 as a fallback instead of NaN
-
-        downside_std = np.std(downside_returns, ddof=1)  # Use ddof=1 for sample std deviation
-
-        # Prevent division by zero
-        if downside_std == 0 or np.isnan(downside_std):
-            return 0
-
-        return (np.mean(returns) - target_return) / downside_std
-
-
-    def calculate_calmar_ratio(self, returns, max_drawdown):
-        return np.mean(returns) / (abs(max_drawdown) + 1e-8)
-
-
-
-
     # New indicator calculations
     def calculate_obv_rl(self, data):
         """On-Balance Volume calculation"""
@@ -433,7 +375,7 @@ def fetch_top_movers(limit=2):
 
         # Select top `limit` symbols
         top_symbols = [symbol for symbol, _ in volume_list[:limit]]
-        
+
         logging.info(f"Top high-volume coins (below $10) selected: {top_symbols}")
         return top_symbols
     except Exception as e:
@@ -1399,13 +1341,13 @@ def should_trade(symbol, model, scaler, data, balance):
             age_hours = (time.time() - model_mtime) / 3600  # Convert age to hours
 
             # Retrain if model is older than 24 hours
-            if age_hours < 10:
+            if age_hours < 24:
                 logging.info(f"✅ Model found for {symbol} (last trained {age_hours:.2f} hours ago). Loading existing model...")
                 logging.info("model_path befoe")
                 model = PPO.load(model_path, env=env)
                 logging.info("model_path after")
             else:
-                logging.info(f"⚠️ Model for {symbol} is older than 10 hours. Retraining...")
+                logging.info(f"⚠️ Model for {symbol} is older than 24 hours. Retraining...")
                 
                 # Early stopping callback
                 stop_callback = StopTrainingOnNoModelImprovement(
