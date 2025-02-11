@@ -373,6 +373,9 @@ def fetch_top_movers(limit=6):
 
         logging.info(f"Top high-volume coins (below $10) selected: {top_symbols}")
         return top_symbols
+    except Exception as e:
+        logging.error(f"Error fetching high-volume gainers/losers: {e}")
+        return []
 
 
 
