@@ -260,8 +260,19 @@ class CryptoTradingEnv(gym.Env):
     
     def calculate_sortino_ratio(self, returns, target_return=0):
         downside_returns = returns[returns < target_return]
-        downside_std = np.std(downside_returns)
-        return (np.mean(returns) - target_return) / (downside_std + 1e-8)
+
+        # Handle empty downside returns
+        if downside_returns.size == 0:
+            return 0  # Return 0 as a fallback instead of NaN
+
+        downside_std = np.std(downside_returns, ddof=1)  # Use ddof=1 for sample std deviation
+
+        # Prevent division by zero
+        if downside_std == 0 or np.isnan(downside_std):
+            return 0
+
+        return (np.mean(returns) - target_return) / downside_std
+
 
     def calculate_calmar_ratio(self, returns, max_drawdown):
         return np.mean(returns) / (abs(max_drawdown) + 1e-8)
@@ -421,7 +432,7 @@ def fetch_top_movers(limit=2):
 
         # Select top `limit` symbols
         top_symbols = [symbol for symbol, _ in volume_list[:limit]]
-
+        top_symbols = ['TST/USDT:USDT']
         logging.info(f"Top high-volume coins (below $10) selected: {top_symbols}")
         return top_symbols
     except Exception as e:
