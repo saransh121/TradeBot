@@ -346,51 +346,33 @@ class CryptoTradingEnv(gym.Env):
 
 
 
-def fetch_top_movers(limit=6, mix_ratio=0.5):
+def fetch_top_movers(limit=6):
     """
-    Fetch a mix of top gainers and top losers based on 24h percentage change,
-    while ensuring all selected coins are priced below $10.
+    Fetch top high-volume coins based on 24h trading volume and filter coins priced below $10.
 
-    :param limit: Total number of coins to return.
-    :param mix_ratio: Ratio of gainers to losers (default 50/50).
+    :param limit: Number of coins to return.
     :return: List of selected trading pairs.
     """
     try:
         tickers = exchange.fetch_tickers()
 
-        gainers, losers = [], []
+        volume_list = []
         for symbol, data in tickers.items():
-            if "USDT" in symbol and isinstance(data, dict) and 'quoteVolume' in data and 'last' in data and 'percentage' in data:
+            if "USDT" in symbol and isinstance(data, dict) and 'quoteVolume' in data and 'last' in data:
                 volume = float(data['quoteVolume'])  # 24h trading volume in quote currency
                 price = float(data['last'])  # Current price of the asset
-                change = float(data['percentage'])  # 24h percentage change
                 
                 if price < 10:  # Only select coins priced below $10
-                    if change > 0:
-                        gainers.append((symbol, change, volume))
-                    elif change < 0:
-                        losers.append((symbol, abs(change), volume))
+                    volume_list.append((symbol, volume))
 
-        # Sort by percentage change (descending for gainers, ascending for losers)
-        gainers = sorted(gainers, key=lambda x: x[1], reverse=True)
-        losers = sorted(losers, key=lambda x: x[1], reverse=True)
+        # Sort by highest volume
+        volume_list = sorted(volume_list, key=lambda x: x[1], reverse=True)
 
-        # Determine how many gainers and losers to take
-        num_gainers = int(limit * mix_ratio)
-        num_losers = limit - num_gainers
+        # Select top `limit` symbols
+        top_symbols = [symbol for symbol, _ in volume_list[:limit]]
 
-        # Select top movers
-        top_gainers = [symbol for symbol, _, _ in gainers[:num_gainers]]
-        top_losers = [symbol for symbol, _, _ in losers[:num_losers]]
-
-        top_symbols = top_gainers + top_losers
-
-        logging.info(f"Top mixed movers (below $10) selected: {top_symbols}")
+        logging.info(f"Top high-volume coins (below $10) selected: {top_symbols}")
         return top_symbols
-
-    except Exception as e:
-        logging.error(f"Error fetching high-volume gainers/losers: {e}")
-        return []
 
 
 
