@@ -207,7 +207,8 @@ class CryptoTradingEnv(gym.Env):
         
         # Risk-adjusted return
         pnl = price_change * self.LEVERAGE * position_size
-        risk_adjusted_return = (pnl - trading_fee) * self.calculate_sortino_ratio(np.diff(np.log(self.data[:self.current_step+1, 0])))
+        risk_adjusted_return = (pnl - trading_fee)
+        #* self.calculate_sortino_ratio(np.diff(np.log(self.data[:self.current_step+1, 0])))
         
         # Drawdown penalty
         peak = max(self.balance, 100)
