@@ -23,6 +23,8 @@ import tensorflow as tf
 from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnNoModelImprovement
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from stable_baselines3.common.utils import get_linear_fn
+
 
 import gym
 import numpy as np
@@ -168,47 +170,58 @@ class CryptoTradingEnv(gym.Env):
         return (obs - np.mean(self.data, axis=0)) / (np.std(self.data, axis=0) + 1e-8)
 
     def get_reward(self, action):
-        """Enhanced reward function with multiple factors"""
+        """Enhanced reward function to encourage profitable trading."""
         if self.current_step == 0:
-            return 0
+            return 0  
 
-        # Calculate price impact with slippage
         price = self._get_current_price()
         slippage = price * self.slippage_percent / 100
-        price_change = (price - self.data[self.current_step-1, 0]) + slippage
-        
-        # Position sizing based on volatility
-        atr = self.data[self.current_step, 6]
-        position_size = min(0.1 * self.balance, self.balance * 0.01 / (atr + 1e-8))
-        
-        # Enhanced fee calculation
+        price_change = (price - self.data[self.current_step - 1, 0]) + slippage
+
+        atr = self.data[self.current_step, 6]  
+        atr_norm = atr / self.data[self.current_step, 0]  
+        position_size = min(0.1 * self.balance, self.balance * 0.01 / (atr_norm + 1e-8))
+
         trade_size = position_size * self.LEVERAGE
-        trading_fee = trade_size * self.TRADING_FEE_PERCENT if action in [1,2] else 0
-        
-        # Sharpe ratio consideration
-        returns = np.diff(np.log(self.data[:self.current_step+1, 0]))
-        sharpe_ratio = np.mean(returns) / (np.std(returns) + 1e-8)
-        
-        # Risk-adjusted return
+        trading_fee = trade_size * self.TRADING_FEE_PERCENT if action in [1, 2] else 0
+
+        returns = np.diff(np.log(self.data[:self.current_step + 1, 0]))
+        sharpe_ratio = np.mean(returns) / (np.std(returns) + 1e-8) if len(returns) > 1 else 0
+
         pnl = price_change * self.LEVERAGE * position_size
         risk_adjusted_return = (pnl - trading_fee) * sharpe_ratio
-        
-        # Drawdown penalty
-        peak = max(self.balance, 100)
-        drawdown_penalty = (peak - self.balance) * 0.1
-        
-        # Trend alignment bonus
-        trend_alignment = self._calculate_trend_alignment()
-        
-        # Final reward composition
-        reward = risk_adjusted_return - drawdown_penalty + trend_alignment
+
+        peak = max(self.balance, max([trade["balance"] for trade in self.trade_history], default=100))
+        drawdown_penalty = (peak - self.balance) * 0.05  # Reduce drawdown penalty
+
+        ema_50 = self.data[self.current_step, 7]
+        ema_200 = self.data[self.current_step, 8]
+        adx = self.data[self.current_step, 12]  
+
+        trend_bonus = 0
+        if ema_50 > ema_200 and adx > 20:
+            trend_bonus = 0.5  
+        elif ema_50 < ema_200 and adx > 20:
+            trend_bonus = -0.5  
+
+        volatility_penalty = min(atr_norm * 5, 0.2)  
+
+        recent_high = max(self.data[max(0, self.current_step - 10): self.current_step + 1, 0])
+        profit_taking_bonus = 0.3 if price >= recent_high else 0
+
+        exit_bonus = 0.5 if action == 0 and price > np.mean(self.entry_prices) else 0
+
+        reward = (risk_adjusted_return - drawdown_penalty + trend_bonus + profit_taking_bonus + exit_bonus) - volatility_penalty
 
         if action in [1, 2] and price_change < 0:
-            reward -= 0.5  # Penalize for false signals
-        
-        if action == 0 and abs(price_change) > 0.02:  # If price moved significantly
-            reward -= 0.2  # Penalize for not taking action
+            reward -= 0.5  
+
+        if action == 0 and abs(price_change) > 0.02 and adx > 20:
+            reward -= 0.2  # Encourage action when market is strong
         return float(reward)
+
+
+
 
     # New helper methods
     def _get_current_price(self):
@@ -1364,11 +1377,12 @@ def should_trade(symbol, model, scaler, data, balance):
                     deterministic=True,  # Use deterministic actions for evaluation
                     verbose=1
                 )
+                learning_rate_schedule = get_linear_fn(start=0.0003, end=0.0001, end_fraction=0.8)
                 model = PPO(
                     "MlpPolicy",
                     env,
                     verbose=1,
-                    learning_rate=lambda f: 0.0004 * (1 - f),  # Adaptive LR decay
+                    learning_rate=learning_rate_schedule,  # Adaptive LR decay
                     gamma=0.985,  # Encourages long-term rewards
                     gae_lambda=0.88,  # Reduces variance in advantage estimation
                     clip_range=0.15,  # Stabilizes updates
@@ -1408,11 +1422,12 @@ def should_trade(symbol, model, scaler, data, balance):
                     deterministic=True,  # Use deterministic actions for evaluation
                     verbose=1
             )
+            learning_rate_schedule = get_linear_fn(start=0.0003, end=0.0001, end_fraction=0.8)
             model = PPO(
                             "MlpPolicy",
                             env,
                             verbose=1,
-                            learning_rate=lambda f: 0.0004 * (1 - f),  # Adaptive LR decay
+                            learning_rate=learning_rate_schedule,  # Adaptive LR decay
                             gamma=0.985,  # Encourages long-term rewards
                             gae_lambda=0.88,  # Reduces variance in advantage estimation
                             clip_range=0.15,  # Stabilizes updates
