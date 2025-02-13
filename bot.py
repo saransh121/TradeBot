@@ -199,12 +199,12 @@ class CryptoTradingEnv(gym.Env):
         adx = self.data[self.current_step, 12]  
 
         trend_bonus = 0
-        if ema_50 > ema_200 and adx > 20:
-            trend_bonus = 0.5  
-        elif ema_50 < ema_200 and adx > 20:
+        if ema_50 > ema_200 :
+            trend_bonus = 0.3  
+        elif ema_50 < ema_200 :
             trend_bonus = -0.5  
 
-        volatility_penalty = min(atr_norm * 5, 0.2)  
+        volatility_penalty = min(atr_norm * 5, 0.1)  
 
         recent_high = max(self.data[max(0, self.current_step - 10): self.current_step + 1, 0])
         profit_taking_bonus = 0.3 if price >= recent_high else 0
@@ -216,7 +216,7 @@ class CryptoTradingEnv(gym.Env):
         if action in [1, 2] and price_change < 0:
             reward -= 0.5  
 
-        if action == 0 and abs(price_change) > 0.02 and adx > 20:
+        if action == 0 and abs(price_change) > 0.02:
             reward -= 0.2  # Encourage action when market is strong
         return float(reward)
 
