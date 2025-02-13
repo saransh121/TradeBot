@@ -1387,7 +1387,7 @@ def should_trade(symbol, model, scaler, data, balance):
                     deterministic=True,  # Use deterministic actions for evaluation
                     verbose=1
                 )
-                learning_rate_schedule = get_linear_fn(start=0.0003, end=0.0001, end_fraction=0.8)
+                learning_rate_schedule = get_linear_fn(start=0.001, end=0.0001, end_fraction=0.8)
                 model = PPO(
                     "MlpPolicy",
                     env,
@@ -1432,7 +1432,7 @@ def should_trade(symbol, model, scaler, data, balance):
                     deterministic=True,  # Use deterministic actions for evaluation
                     verbose=1
             )
-            learning_rate_schedule = get_linear_fn(start=0.0003, end=0.0001, end_fraction=0.8)
+            learning_rate_schedule = get_linear_fn(start=0.001, end=0.0001, end_fraction=0.8)
             model = PPO(
                             "MlpPolicy",
                             env,
