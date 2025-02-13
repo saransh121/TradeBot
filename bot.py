@@ -1364,7 +1364,7 @@ def should_trade(symbol, model, scaler, data, balance):
             age_hours = (time.time() - model_mtime) / 3600  # Convert age to hours
 
             # Retrain if model is older than 24 hours
-            if age_hours < 24:
+            if age_hours < 4:
                 logging.info(f"✅ Model found for {symbol} (last trained {age_hours:.2f} hours ago). Loading existing model...")
                 logging.info("model_path befoe")
                 model = PPO.load(model_path, env=env)
@@ -1400,7 +1400,7 @@ def should_trade(symbol, model, scaler, data, balance):
                     vf_coef=0.6,  # Higher weight on value function
                     max_grad_norm=0.7,  # Prevents unstable updates
                     batch_size=256,  # Larger batch size for better gradient updates
-                    n_epochs=30,  # More updates per batch
+                    n_epochs=10,  # More updates per batch
                     target_kl=0.025,  # Prevents excessive updates when KL divergence is too high
                     policy_kwargs=dict(
                         net_arch=[dict(pi=[256, 256], vf=[256, 256])]  # Bigger network with separate policy/value heads
@@ -1445,7 +1445,7 @@ def should_trade(symbol, model, scaler, data, balance):
                             vf_coef=0.6,  # Higher weight on value function
                             max_grad_norm=0.7,  # Prevents unstable updates
                             batch_size=256,  # Larger batch size for better gradient updates
-                            n_epochs=30,  # More updates per batch
+                            n_epochs=10,  # More updates per batch
                             target_kl=0.025,  # Prevents excessive updates when KL divergence is too high
                             policy_kwargs=dict(
                                 net_arch=[dict(pi=[256, 256], vf=[256, 256])]  # Bigger network with separate policy/value heads
