@@ -1388,27 +1388,9 @@ def should_trade(symbol, model, scaler, data, balance):
                     verbose=1
                 )
                 learning_rate_schedule = get_linear_fn(start=0.001, end=0.0001, end_fraction=0.8)
-                model = PPO(
-                    "MlpPolicy",
-                    env,
-                    verbose=1,
-                    learning_rate=learning_rate_schedule,  # Adaptive LR decay
-                    gamma=0.985,  # Encourages long-term rewards
-                    gae_lambda=0.88,  # Reduces variance in advantage estimation
-                    clip_range=0.15,  # Stabilizes updates
-                    ent_coef=0.03,  # More exploration (good for crypto)
-                    vf_coef=0.6,  # Higher weight on value function
-                    max_grad_norm=0.7,  # Prevents unstable updates
-                    batch_size=256,  # Larger batch size for better gradient updates
-                    n_epochs=10,  # More updates per batch
-                    target_kl=0.025,  # Prevents excessive updates when KL divergence is too high
-                    policy_kwargs=dict(
-                        net_arch=[dict(pi=[256, 256], vf=[256, 256])]  # Bigger network with separate policy/value heads
-                    ),
-                    tensorboard_log="./ppo_logs/",  # Enables TensorBoard logging
-                    )
+                model = PPO.load(model_path, env=env)
                 model.learn(
-                total_timesteps=200000,  # Train for 1M timesteps
+                total_timesteps=100000,  # Train for 1M timesteps
                 callback=eval_callback,  # Add evaluation callback
                 tb_log_name="ppo_crypto_trading"  # TensorBoard experiment name
                 )
