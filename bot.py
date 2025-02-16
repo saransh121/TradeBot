@@ -258,8 +258,7 @@ class CryptoTradingEnv(gym.Env):
 
         # Ensure reward is within reasonable bounds
         reward = np.clip(reward, -1, 1)
-        logging.info(f"Step {self.current_step}: Action={action}, RSI={rsi:.2f}, MACD={macd:.2f}, ATR={atr:.2f}, Reward={reward:.4f} , PNL = {pnl}  , price_change = {price_change}")
-        logging.info(f" price = {price} , returns = {returns}")
+       
 
         
         return float(reward)
