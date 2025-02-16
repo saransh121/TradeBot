@@ -256,6 +256,18 @@ class CryptoTradingEnv(gym.Env):
         elif action == 2 and obv < 0:
             reward += 0.3  # Sell with volume
 
+        if action == 2 and rsi < 35:  # Selling in oversold
+            penalty -= 0.05
+        if action == 1 and rsi > 70:  # Buying in overbought
+            penalty -= 0.05
+        if action == 2 and macd > signal:  # Selling in bullish momentum
+            penalty -= 0.05
+        if action == 1 and macd < signal:  # Buying in bearish momentum
+            penalty -= 0.05
+        if action == 2 and price > ema_50:  # Selling above trend
+            penalty -= 0.05
+        if action == 1 and price < ema_50:  # Buying below trend
+            penalty -= 0.05
         # Ensure reward is within reasonable bounds
         reward = np.clip(reward, -1, 1)
        
