@@ -143,7 +143,7 @@ class CryptoTradingEnv(gym.Env):
             reward = self.max_drawdown
             obs = self.get_observation()
             return obs, reward, done, {}
-
+        
         reward = self.get_reward(action)
         obs = self.get_observation()
         
@@ -179,7 +179,12 @@ class CryptoTradingEnv(gym.Env):
         price = self._get_current_price()
         slippage = price * self.slippage_percent / 100
         price_change = (price - self.data[self.current_step-1, 0]) + slippage
+        indicators = self.data[self.current_step]
+
+        rsi, macd, signal, hist, atr, ema_50, ema_200, upper_band, lower_band, obv, adx = indicators[2:13]
+
         
+
         # Position sizing based on volatility
         atr = self.data[self.current_step, 6]
         position_size = min(0.1 * self.balance, self.balance * 0.01 / (atr + 1e-8))
@@ -225,8 +230,37 @@ class CryptoTradingEnv(gym.Env):
         if action == 0 and abs(price_change) > 0.02:
             reward -= 0.2  # Penalize for not taking action
         
+        if action == 1 and macd > signal:
+            reward += 0.5  # Buy if MACD bullish
+        elif action == 2 and macd < signal:
+            reward += 0.5  # Sell if MACD bearish
+
+        # ADX trend strength
+        if adx > 25:
+            reward += 0.2  # Strong trend bonus
+
+        # Reward based on RSI
+        if action == 1 and rsi < 30:
+            reward += 0.5  # Buy signal in oversold
+        elif action == 2 and rsi > 70:
+            reward += 0.5  # Sell signal in overbought
+
+        # Bollinger Bands Strategy
+        if action == 1 and price < lower_band:
+            reward += 0.5  # Buy near lower band
+        elif action == 2 and price > upper_band:
+            reward += 0.5  # Sell near upper band
+
+        if action == 1 and obv > 0:
+            reward += 0.3  # Buy with volume
+        elif action == 2 and obv < 0:
+            reward += 0.3  # Sell with volume
+
         # Ensure reward is within reasonable bounds
         reward = np.clip(reward, -1, 1)
+        logging.info(f"Step {self.current_step}: Action={action}, RSI={rsi:.2f}, MACD={macd:.2f}, ATR={atr:.2f}, Reward={reward:.4f} , PNL = {pnl}  , price_change = {price_change}")
+        logging.info(f" price = {price} , returns = {returns}")
+
         
         return float(reward)
 
@@ -1370,7 +1404,7 @@ def should_trade(symbol, model, scaler, data, balance):
                 model = PPO.load(model_path, env=env)
                 logging.info("model_path after")
             else:
-                logging.info(f"⚠️ Model for {symbol} is older than 24 hours. Retraining...")
+                logging.info(f"⚠️ Model for {symbol} is older than 4 hours. Retraining...")
                 
                 # Early stopping callback
                 stop_callback = StopTrainingOnNoModelImprovement(
