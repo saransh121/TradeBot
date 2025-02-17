@@ -428,7 +428,7 @@ class CryptoTradingEnv(gym.Env):
 
 
 
-def fetch_top_movers(limit=3):
+def fetch_top_movers(limit=2):
     """
     Fetch top high-volume coins based on 24h trading volume and filter coins priced below $10.
 
@@ -444,7 +444,7 @@ def fetch_top_movers(limit=3):
                 volume = float(data['quoteVolume'])  # 24h trading volume in quote currency
                 price = float(data['last'])  # Current price of the asset
                 
-                if price < 10:  # Only select coins priced below $10
+                if price < 30:  # Only select coins priced below $10
                     volume_list.append((symbol, volume))
 
         # Sort by highest volume
