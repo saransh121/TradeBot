@@ -49,7 +49,7 @@ exchange = ccxt.binance({
 logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Parameters
-LEVERAGE = 10
+LEVERAGE = 15
 POSITION_SIZE_PERCENT = 0.2  # % of wallet balance to trade per coin
 TIMEFRAME = '15m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
@@ -63,7 +63,7 @@ import logging
 import time
 
 class CryptoTradingEnv(gym.Env):
-    LEVERAGE = 10
+    LEVERAGE = 15
     TRADING_FEE_PERCENT = 0.04 / 100
     
     def __init__(self, exchange, symbol, timeframe='15m'):
@@ -77,7 +77,7 @@ class CryptoTradingEnv(gym.Env):
         self.action_space = spaces.Discrete(3)
         
         # Expanded observation space with additional features
-        self.observation_space = spaces.Box(low=-1, high=1, shape=(14,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-1, high=1, shape=(15,), dtype=np.float32)
         
         self.current_step = 0
         self.data = self.fetch_data()
@@ -110,19 +110,20 @@ class CryptoTradingEnv(gym.Env):
             atr = self.calculate_atr_rl(data)
             ema_50 = self.calculate_ema_rl(close, 50)
             ema_200 = self.calculate_ema_rl(close, 200)
+            ema_9 = self.calculate_ema_rl(close, 9)
             upper_band, lower_band = self.calculate_bollinger_bands_rl(close)
             obv = self.calculate_obv_rl(data)  # New On-Balance Volume indicator
             adx = self.calculate_adx_rl(data)  # New ADX indicator
             
             # Ensure alignment
             min_length = min(len(close), len(volume), len(rsi), len(macd), len(signal), len(atr), len(ema_50), 
-                             len(ema_200), len(upper_band), len(lower_band) , len(adx) , len(obv))
+                             len(ema_200), len(upper_band), len(lower_band) , len(adx) , len(obv),len(ema_9))
             indicators = np.column_stack((
                 close[-min_length:], volume[-min_length:], rsi[-min_length:],
                 macd[-min_length:], signal[-min_length:], hist[-min_length:],
                 atr[-min_length:], ema_50[-min_length:], ema_200[-min_length:],
                 upper_band[-min_length:], lower_band[-min_length:],
-                obv[-min_length:], adx[-min_length:],
+                obv[-min_length:], adx[-min_length:],ema_9[-min_length:],
                 np.zeros(min_length)  # Placeholder for sentiment analysis
             ))
 
@@ -181,7 +182,7 @@ class CryptoTradingEnv(gym.Env):
         price_change = (price - self.data[self.current_step-1, 0]) + slippage
         indicators = self.data[self.current_step]
 
-        rsi, macd, signal, hist, atr, ema_50, ema_200, upper_band, lower_band, obv, adx = indicators[2:13]
+        rsi, macd, signal, hist, atr, ema_50, ema_200, upper_band, lower_band, obv, adx , ema_9  = indicators[2:14]
 
         
 
@@ -255,6 +256,14 @@ class CryptoTradingEnv(gym.Env):
             reward += 0.3  # Buy with volume
         elif action == 2 and obv < 0:
             reward += 0.3  # Sell with volume
+
+
+        if action == 1 and ((price >= ema_9 and price - ema_9 < atr) or (price >= ema_50 and price - ema_50 < atr) or (price >= ema_200 and price - ema_200 < atr)):
+            reward += 0.5  # Reward buy at EMA support
+
+        if action == 2 and ((price <= ema_9 and ema_9 - price < atr) or (price <= ema_50 and ema_50 - price < atr) or (price <= ema_200 and ema_200 - price < atr)):
+            reward += 0.5  # Reward sell at EMA resistance
+
 
         if action == 2 and rsi < 35:  # Selling in oversold
             reward -= 0.05
@@ -1466,14 +1475,14 @@ def should_trade(symbol, model, scaler, data, balance):
                             verbose=1,
                             learning_rate=learning_rate_schedule,  # Adaptive LR decay
                             gamma=0.985,  # Encourages long-term rewards
-                            gae_lambda=0.88,  # Reduces variance in advantage estimation
+                            gae_lambda=0.92,  # Reduces variance in advantage estimation
                             clip_range=0.15,  # Stabilizes updates
                             ent_coef=0.03,  # More exploration (good for crypto)
                             vf_coef=0.6,  # Higher weight on value function
                             max_grad_norm=0.7,  # Prevents unstable updates
                             batch_size=256,  # Larger batch size for better gradient updates
-                            n_epochs=10,  # More updates per batch
-                            target_kl=0.025,  # Prevents excessive updates when KL divergence is too high
+                            n_epochs=7,  # More updates per batch
+                            target_kl=0.05,  # Prevents excessive updates when KL divergence is too high
                             policy_kwargs=dict(
                                 net_arch=[dict(pi=[256, 256], vf=[256, 256])]  # Bigger network with separate policy/value heads
                             ),
