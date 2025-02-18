@@ -728,6 +728,7 @@ def place_order(symbol, side, size):
                 break
         
         if active_trade:
+            logging.info(f"active_trade {active_trade}")
             entry_price = active_trade['entryPrice']
             unrealized_pnl = (current_price - entry_price) / entry_price * 100 if side == 'buy' else (entry_price - current_price) / entry_price * 100
             logging.info(f"Active trade found: {side} {size} {symbol} at {entry_price}, Unrealized PnL: {unrealized_pnl:.2f}%")
