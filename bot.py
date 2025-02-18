@@ -1584,7 +1584,7 @@ def monitor_positions():
                 unrealized_profit = float(position['unrealizedPnl'])
                 notional_value = float(position['initialMargin'])
                 dynamic_profit_target = max(0.1, min(0.3, atr / notional_value * (LEVERAGE / 10)))
-                logging.info(f"dynamic profit target for the coin {symbol} is {dynamic_profit_target}")
+                #logging.info(f"dynamic profit target for the coin {symbol} is {dynamic_profit_target}")
 
                 # Function to close position and cancel stop-loss
                 def close_position():
@@ -1609,7 +1609,7 @@ def monitor_positions():
                     action, _ = model.predict(obs,deterministic=True)
                     action = int(action[0])
                     trade_action = ["Hold", "buy", "sell"][action]
-                    logging.info(f"Model prediction for the  coin {symbol} is {trade_action}")
+                   # logging.info(f"Model prediction for the  coin {symbol} is {trade_action}")
                 
                 except Exception as e:
                     logging.error(f"Monitor Trade Loading model exception {e} , setting trade_action to empty")
