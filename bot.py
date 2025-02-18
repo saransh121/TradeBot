@@ -51,7 +51,7 @@ logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(as
 # Parameters
 LEVERAGE = 10
 POSITION_SIZE_PERCENT = 0.2  # % of wallet balance to trade per coin
-TIMEFRAME = '15m'
+TIMEFRAME = '5m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
@@ -66,7 +66,7 @@ class CryptoTradingEnv(gym.Env):
     LEVERAGE = 10
     TRADING_FEE_PERCENT = 0.04 / 100
     
-    def __init__(self, exchange, symbol, timeframe='15m'):
+    def __init__(self, exchange, symbol, timeframe='5m'):
         super(CryptoTradingEnv, self).__init__()
         
         self.exchange = exchange
@@ -108,9 +108,9 @@ class CryptoTradingEnv(gym.Env):
             rsi = self.calculate_rsi_rl(close)
             macd, signal, hist = self.calculate_macd_rl(close)  # Added histogram
             atr = self.calculate_atr_rl(data)
-            ema_50 = self.calculate_ema_rl(close, 50)
-            ema_200 = self.calculate_ema_rl(close, 200)
-            ema_9 = self.calculate_ema_rl(close, 9)
+            ema_50 = self.calculate_ema_rl(close, 25)
+            ema_200 = self.calculate_ema_rl(close, 99)
+            ema_9 = self.calculate_ema_rl(close, 7)
             upper_band, lower_band = self.calculate_bollinger_bands_rl(close)
             obv = self.calculate_obv_rl(data)  # New On-Balance Volume indicator
             adx = self.calculate_adx_rl(data)  # New ADX indicator
@@ -157,7 +157,7 @@ class CryptoTradingEnv(gym.Env):
     def reset(self):
         """Reset with additional tracking parameters"""
         self.current_step = 0
-        self.balance = 100
+        self.balance = 400
         self.position = 0
         self.trade_history = []
         self.entry_prices = []
@@ -188,7 +188,7 @@ class CryptoTradingEnv(gym.Env):
 
         # Position sizing based on volatility
         atr = self.data[self.current_step, 6]
-        position_size = min(0.1 * self.balance, self.balance * 0.01 / (atr + 1e-8))
+        position_size = min(0.2 * self.balance, self.balance * 0.01 / (atr + 1e-8))
         
         # Enhanced fee calculation
         trade_size = position_size * self.LEVERAGE
@@ -259,10 +259,10 @@ class CryptoTradingEnv(gym.Env):
 
 
         if action == 1 and ((price >= ema_9 and price - ema_9 < atr) or (price >= ema_50 and price - ema_50 < atr) or (price >= ema_200 and price - ema_200 < atr)):
-            reward += 0.5  # Reward buy at EMA support
+            reward += 0.3  # Reward buy at EMA support
 
         if action == 2 and ((price <= ema_9 and ema_9 - price < atr) or (price <= ema_50 and ema_50 - price < atr) or (price <= ema_200 and ema_200 - price < atr)):
-            reward += 0.5  # Reward sell at EMA resistance
+            reward += 0.3  # Reward sell at EMA resistance
 
 
         if action == 2 and rsi < 35:  # Selling in oversold
@@ -430,7 +430,7 @@ class CryptoTradingEnv(gym.Env):
 
 def fetch_top_movers(limit=2):
     """
-    Fetch top high-volume coins based on 24h trading volume and filter coins priced below $10.
+    Fetch top high-volume coins based on 24h trading volume.
 
     :param limit: Number of coins to return.
     :return: List of selected trading pairs.
@@ -440,12 +440,9 @@ def fetch_top_movers(limit=2):
 
         volume_list = []
         for symbol, data in tickers.items():
-            if "USDT" in symbol and isinstance(data, dict) and 'quoteVolume' in data and 'last' in data:
-                volume = float(data['quoteVolume'])  # 24h trading volume in quote currency
-                price = float(data['last'])  # Current price of the asset
-                
-                if price < 10:  # Only select coins priced below $10
-                    volume_list.append((symbol, volume))
+            if "USDT" in symbol and isinstance(data, dict) and 'quoteVolume' in data:
+                volume = float(data['quoteVolume'])  # 24h trading volume
+                volume_list.append((symbol, volume))
 
         # Sort by highest volume
         volume_list = sorted(volume_list, key=lambda x: x[1], reverse=True)
@@ -453,11 +450,12 @@ def fetch_top_movers(limit=2):
         # Select top `limit` symbols
         top_symbols = [symbol for symbol, _ in volume_list[:limit]]
 
-        logging.info(f"Top high-volume coins (below $10) selected: {top_symbols}")
+        logging.info(f"Top high-volume coins selected: {top_symbols}")
         return top_symbols
     except Exception as e:
-        logging.error(f"Error fetching high-volume gainers/losers: {e}")
+        logging.error(f"Error fetching high-volume coins: {e}")
         return []
+
 
 
 
@@ -720,8 +718,22 @@ def place_order(symbol, side, size):
         # Fetch the current price for calculating stop loss
         ticker = exchange.fetch_ticker(symbol)
         current_price = ticker['last']
-
-        # Calculate stop price: 5% below for buy and 5% above for sell
+        open_positions = exchange.fetch_positions()
+        active_trade = None
+        binance_side = 'long' if side == 'buy' else 'short'
+        for position in open_positions:
+            if position['symbol'] == symbol and position['side'] == binance_side and position['size'] > 0:
+                active_trade = position
+                break
+        if active_trade:
+            entry_price = active_trade['entryPrice']
+            unrealized_pnl = (current_price - entry_price) / entry_price * 100 if side == 'buy' else (entry_price - current_price) / entry_price * 100
+            logging.info(f"Active trade found: {side} {size} {symbol} at {entry_price}, Unrealized PnL: {unrealized_pnl:.2f}%")
+            if unrealized_pnl <= 0:
+                    logging.info(f"Skipping trade as active position is not in profit.")
+                    return None, None
+        
+            # Calculate stop price: 5% below for buy and 5% above for sell
         if side == 'buy':
             stop_price = current_price * 0.5  # Stop-loss price 2% below current price
         elif side == 'sell':
@@ -729,10 +741,10 @@ def place_order(symbol, side, size):
         else:
             raise ValueError(f"Invalid order side: {side}")
 
-        # Ensure leverage is set
+            # Ensure leverage is set
         exchange.set_leverage(LEVERAGE, symbol)
 
-        # Place the market order
+            # Place the market order
         market_order = exchange.create_order(symbol, 'market', side, size)
         logging.info(f"Market order placed: {side} {size} {symbol} at {current_price}")
 
@@ -1545,7 +1557,7 @@ def monitor_positions():
                 position_side = position['side']  # 'long' or 'short'
 
                 # Fetch last 14 candles for ATR calculation
-                ohlcv = exchange.fetch_ohlcv(symbol, timeframe='15m', limit=14)
+                ohlcv = exchange.fetch_ohlcv(symbol, timeframe='5m', limit=14)
 
                 # ATR calculation (Average True Range)
                 high_prices = [candle[2] for candle in ohlcv]
@@ -1733,6 +1745,7 @@ def trade():
                         confirmed_action = confirm_signal(symbol, action, data)
 
                         # Place the trade if confirmed
+                        
                         if confirmed_action == 'buy':
                             if place_order(symbol, 'buy', size):
                                 last_trade_time[symbol] = current_time  # Reset cooldown
