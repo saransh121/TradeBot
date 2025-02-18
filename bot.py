@@ -49,7 +49,7 @@ exchange = ccxt.binance({
 logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Parameters
-LEVERAGE = 15
+LEVERAGE = 20
 POSITION_SIZE_PERCENT = 0.2  # % of wallet balance to trade per coin
 TIMEFRAME = '5m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
@@ -63,7 +63,7 @@ import logging
 import time
 
 class CryptoTradingEnv(gym.Env):
-    LEVERAGE = 15
+    LEVERAGE = 30
     TRADING_FEE_PERCENT = 0.04 / 100
     
     def __init__(self, exchange, symbol, timeframe='5m'):
