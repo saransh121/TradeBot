@@ -722,10 +722,11 @@ def place_order(symbol, side, size):
         active_trade = None
         binance_side = 'long' if side == 'buy' else 'short'
         for position in open_positions:
-            
+            logging.info(f"active symbol {position['symbol']}")
             if position['symbol'] == symbol and position['side'] == binance_side and position['size'] > 0:
                 active_trade = position
                 break
+        
         if active_trade:
             entry_price = active_trade['entryPrice']
             unrealized_pnl = (current_price - entry_price) / entry_price * 100 if side == 'buy' else (entry_price - current_price) / entry_price * 100
