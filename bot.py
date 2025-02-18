@@ -49,9 +49,9 @@ exchange = ccxt.binance({
 logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Parameters
-LEVERAGE = 20
+LEVERAGE = 10
 POSITION_SIZE_PERCENT = 0.2  # % of wallet balance to trade per coin
-TIMEFRAME = '5m'
+TIMEFRAME = '15m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
 N_STEPS = 60  # For LSTM input sequence length
 
@@ -63,10 +63,10 @@ import logging
 import time
 
 class CryptoTradingEnv(gym.Env):
-    LEVERAGE = 30
+    LEVERAGE = 15
     TRADING_FEE_PERCENT = 0.04 / 100
     
-    def __init__(self, exchange, symbol, timeframe='5m'):
+    def __init__(self, exchange, symbol, timeframe='15m'):
         super(CryptoTradingEnv, self).__init__()
         
         self.exchange = exchange
@@ -430,7 +430,7 @@ class CryptoTradingEnv(gym.Env):
 
 def fetch_top_movers(limit=2):
     """
-    Fetch top high-volume coins based on 24h trading volume.
+    Fetch top high-volume coins based on 24h trading volume and filter coins priced below $10.
 
     :param limit: Number of coins to return.
     :return: List of selected trading pairs.
@@ -440,9 +440,12 @@ def fetch_top_movers(limit=2):
 
         volume_list = []
         for symbol, data in tickers.items():
-            if "USDT" in symbol and isinstance(data, dict) and 'quoteVolume' in data:
-                volume = float(data['quoteVolume'])  # 24h trading volume
-                volume_list.append((symbol, volume))
+            if "USDT" in symbol and isinstance(data, dict) and 'quoteVolume' in data and 'last' in data:
+                volume = float(data['quoteVolume'])  # 24h trading volume in quote currency
+                price = float(data['last'])  # Current price of the asset
+                
+                if price < 10:  # Only select coins priced below $10
+                    volume_list.append((symbol, volume))
 
         # Sort by highest volume
         volume_list = sorted(volume_list, key=lambda x: x[1], reverse=True)
@@ -450,11 +453,12 @@ def fetch_top_movers(limit=2):
         # Select top `limit` symbols
         top_symbols = [symbol for symbol, _ in volume_list[:limit]]
 
-        logging.info(f"Top high-volume coins selected: {top_symbols}")
+        logging.info(f"Top high-volume coins  selected: {top_symbols}")
         return top_symbols
     except Exception as e:
-        logging.error(f"Error fetching high-volume coins: {e}")
+        logging.error(f"Error fetching high-volume gainers/losers: {e}")
         return []
+
 
 
 
@@ -730,7 +734,7 @@ def place_order(symbol, side, size):
             logging.info(f"active_trade {active_trade}")
             entry_price = active_trade['entryPrice']
             unrealized_pnl = float(active_trade.get('unrealizedPnl', 0))
-            logging.info("unrealized_pnl {unrealized_pnl}")
+            logging.info(f"unrealized_pnl {unrealized_pnl}")
             logging.info(f"Active trade found: {side} {symbol} at {entry_price}, Unrealized PnL: {unrealized_pnl:.2f}%")
             if unrealized_pnl <= 0:
                     logging.info(f"Skipping trade as active position is not in profit.")
@@ -1560,7 +1564,7 @@ def monitor_positions():
                 position_side = position['side']  # 'long' or 'short'
 
                 # Fetch last 14 candles for ATR calculation
-                ohlcv = exchange.fetch_ohlcv(symbol, timeframe='5m', limit=14)
+                ohlcv = exchange.fetch_ohlcv(symbol, timeframe='15m', limit=14)
 
                 # ATR calculation (Average True Range)
                 high_prices = [candle[2] for candle in ohlcv]
@@ -1675,7 +1679,7 @@ def monitor_positions():
                 elif float(position['unrealizedPnl']) <= -float(position['initialMargin']) * 0.4:
                     logging.info(f"{symbol} hit -10% loss. Checking if we should close or hold.")
                     # Recheck signal on a shorter timeframe (5m)
-                    new_data = fetch_data(symbol, '5m')
+                    new_data = fetch_data(symbol, '15m')
                     if new_data is not None and not new_data.empty:
                         new_action, _ = should_trade(symbol, None, 0, new_data, fetch_wallet_balance())
 
