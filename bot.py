@@ -722,15 +722,14 @@ def place_order(symbol, side, size):
         active_trade = None
         binance_side = 'long' if side == 'buy' else 'short'
         for position in open_positions:
-            logging.info(f"active symbol {position} binance_side {binance_side} , ")
-            if position['symbol'] == symbol and position['side'] == binance_side and position['size'] > 0:
+            if position['symbol'] == symbol and position['side'] == binance_side :
                 active_trade = position
                 break
         
         if active_trade:
             logging.info(f"active_trade {active_trade}")
             entry_price = active_trade['entryPrice']
-            unrealized_pnl = (current_price - entry_price) / entry_price * 100 if side == 'buy' else (entry_price - current_price) / entry_price * 100
+            unrealized_pnl = float(active_trade['unRealizedProfit'])
             logging.info(f"Active trade found: {side} {size} {symbol} at {entry_price}, Unrealized PnL: {unrealized_pnl:.2f}%")
             if unrealized_pnl <= 0:
                     logging.info(f"Skipping trade as active position is not in profit.")
