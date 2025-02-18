@@ -722,6 +722,7 @@ def place_order(symbol, side, size):
         active_trade = None
         binance_side = 'long' if side == 'buy' else 'short'
         for position in open_positions:
+            
             if position['symbol'] == symbol and position['side'] == binance_side and position['size'] > 0:
                 active_trade = position
                 break
