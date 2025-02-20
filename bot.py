@@ -49,7 +49,7 @@ exchange = ccxt.binance({
 logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Parameters
-LEVERAGE = 10
+LEVERAGE = 50
 POSITION_SIZE_PERCENT = 0.2  # % of wallet balance to trade per coin
 TIMEFRAME = '15m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
@@ -63,7 +63,7 @@ import logging
 import time
 
 class CryptoTradingEnv(gym.Env):
-    LEVERAGE = 15
+    LEVERAGE = 100
     TRADING_FEE_PERCENT = 0.04 / 100
     
     def __init__(self, exchange, symbol, timeframe='15m'):
@@ -1392,7 +1392,7 @@ def should_trade(symbol, model, scaler, data, balance):
             age_hours = (time.time() - model_mtime) / 3600  # Convert age to hours
 
             # Retrain if model is older than 24 hours
-            if age_hours < 4:
+            if age_hours < 3:
                 logging.info(f"✅ Model found for {symbol} (last trained {age_hours:.2f} hours ago). Loading existing model...")
                 logging.info("model_path befoe")
                 model = PPO.load(model_path, env=env)
