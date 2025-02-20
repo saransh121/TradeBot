@@ -231,69 +231,7 @@ class CryptoTradingEnv(gym.Env):
         if action == 0 and abs(price_change) > 0.02:
             reward -= 0.2  # Penalize for not taking action
         
-        if action == 1 and macd > signal:
-            reward += 0.5  # Buy if MACD bullish
-        elif action == 2 and macd < signal:
-            reward += 0.5  # Sell if MACD bearish
-
-        # ADX trend strength
-        if adx > 25:
-            reward += 0.2  # Strong trend bonus
-
-        # Reward based on RSI
-        if action == 1 and rsi < 30:
-            reward += 0.3  # Buy signal in oversold
-        elif action == 2 and rsi > 70:
-            reward += 0.3  # Sell signal in overbought
-
-        # Bollinger Bands Strategy
-        if action == 1 and price < lower_band:
-            reward += 0.5  # Buy near lower band
-        elif action == 2 and price > upper_band:
-            reward += 0.5  # Sell near upper band
-
-        if action == 1 and obv > 0:
-            reward += 0.2  # Buy with volume
-        elif action == 2 and obv < 0:
-            reward += 0.2  # Sell with volume
-
-
-        if action == 1 and ((price > ema_9 and price - ema_9 < atr) or (price > ema_50 and price - ema_50 < atr) or (price > ema_200 and price - ema_200 < atr)):
-            reward += 0.5  # Reward buy near EMA support (above EMA)
-
-        if action == 2 and ((price < ema_9 and ema_9 - price < atr) or (price < ema_50 and ema_50 - price < atr) or (price < ema_200 and ema_200 - price < atr)):
-            reward += 0.5  # Reward sell near EMA resistance (below EMA)
-
-
-        trend_up = (price > ema_50) and (ema_9 > ema_50)
-        trend_down = (price < ema_50) and (ema_9 < ema_50)
-
-        if action == 1:
-            # Buy rewards
-            if trend_up and (price - ema_9 < atr):
-                reward += 0.5
-            if rsi < 30 and obv > 0:
-                reward += 0.3
-        elif action == 2:
-            # Sell rewards
-            if trend_down and (ema_9 - price < atr):
-                reward += 0.5
-            if rsi > 70 and obv < 0:
-                reward += 0.3
-
-
-        if action == 2 and rsi < 35:  # Selling in oversold
-            reward -= 0.05
-        if action == 1 and rsi > 70:  # Buying in overbought
-            reward -= 0.05
-        if action == 2 and macd > signal:  # Selling in bullish momentum
-            reward -= 0.05
-        if action == 1 and macd < signal:  # Buying in bearish momentum
-            reward -= 0.05
-        if action == 2 and price > ema_50:  # Selling above trend
-            reward -= 0.05
-        if action == 1 and price < ema_50:  # Buying below trend
-            reward -= 0.05
+        
         # Ensure reward is within reasonable bounds
         reward = np.clip(reward, -1, 1)
        
