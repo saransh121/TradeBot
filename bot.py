@@ -701,7 +701,7 @@ def place_order(symbol, side, size):
         active_trade = None
         binance_side = 'long' if side == 'buy' else 'short'
         for position in open_positions:
-            if position['symbol'] == symbol  :
+            if position['symbol'] == symbol:
                 active_trade = position
                 break
         
@@ -1566,7 +1566,7 @@ def monitor_positions():
                 unrealized_profit = float(position['unrealizedPnl'])
                 notional_value = float(position['initialMargin'])
                 dynamic_profit_target = max(0.05, min(0.1, atr / notional_value * (LEVERAGE / 10)))
-                #logging.info(f"dynamic profit target for the coin {symbol} is {dynamic_profit_target}")
+                logging.info(f"dynamic profit target for the coin {symbol} is {dynamic_profit_target}")
 
                 # Function to close position and cancel stop-loss
                 def close_position():
@@ -1591,7 +1591,7 @@ def monitor_positions():
                     action, _ = model.predict(obs,deterministic=True)
                     action = int(action[0])
                     trade_action = ["Hold", "buy", "sell"][action]
-                   # logging.info(f"Model prediction for the  coin {symbol} is {trade_action}")
+                    logging.info(f"Model prediction for the  coin {symbol} is {trade_action}")
                 
                 except Exception as e:
                     logging.error(f"Monitor Trade Loading model exception {e} , setting trade_action to empty")
@@ -1747,7 +1747,7 @@ def trade():
                 logging.info("Insufficient balance. Waiting for funds.")
                 time.sleep(120)  # Longer wait on low balance
 
-            time.sleep(120)  # Regular wait before checking again
+            time.sleep(60)  # Regular wait before checking again
 
         except Exception as e:
             logging.error(f"Error in main loop: {e}")
