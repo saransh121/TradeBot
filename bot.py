@@ -49,7 +49,7 @@ exchange = ccxt.binance({
 logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Parameters
-LEVERAGE = 50
+LEVERAGE = 100
 POSITION_SIZE_PERCENT = 0.2  # % of wallet balance to trade per coin
 TIMEFRAME = '15m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
@@ -63,7 +63,7 @@ import logging
 import time
 
 class CryptoTradingEnv(gym.Env):
-    LEVERAGE = 100
+    LEVERAGE = 200
     TRADING_FEE_PERCENT = 0.04 / 100
     
     def __init__(self, exchange, symbol, timeframe='15m'):
@@ -1398,7 +1398,7 @@ def should_trade(symbol, model, scaler, data, balance):
                 model = PPO.load(model_path, env=env)
                 logging.info("model_path after")
             else:
-                logging.info(f"⚠️ Model for {symbol} is older than 4 hours. Retraining...")
+                logging.info(f"⚠️ Model for {symbol} is older than 3 hours. Retraining...")
                 
                 # Early stopping callback
                 stop_callback = StopTrainingOnNoModelImprovement(
@@ -1545,7 +1545,7 @@ def monitor_positions():
                 #max(atr * dynamic_multiplier, 0.0001)  # Adjust multiplier as needed (e.g., 0.5x ATR)
                 unrealized_profit = float(position['unrealizedPnl'])
                 notional_value = float(position['initialMargin'])
-                dynamic_profit_target = max(0.05, min(0.1, atr / notional_value * (LEVERAGE / 10)))
+                dynamic_profit_target = max(0.05, min(0.05, atr / notional_value * (LEVERAGE / 10)))
                 #logging.info(f"dynamic profit target for the coin {symbol} is {dynamic_profit_target}")
 
                 # Function to close position and cancel stop-loss
@@ -1727,7 +1727,7 @@ def trade():
                 logging.info("Insufficient balance. Waiting for funds.")
                 time.sleep(120)  # Longer wait on low balance
 
-            time.sleep(60)  # Regular wait before checking again
+            time.sleep(120)  # Regular wait before checking again
 
         except Exception as e:
             logging.error(f"Error in main loop: {e}")
