@@ -49,7 +49,7 @@ exchange = ccxt.binance({
 logging.basicConfig(level=logging.INFO, filename='trading_bot.log', format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Parameters
-LEVERAGE = 100
+LEVERAGE = 10
 POSITION_SIZE_PERCENT = 0.2  # % of wallet balance to trade per coin
 TIMEFRAME = '15m'
 PROFIT_TARGET_PERCENT = 0.1  # 10% profit target
@@ -390,10 +390,29 @@ def fetch_top_movers(limit=1):
     :param limit: Number of coins to return.
     :return: List of selected trading pairs.
     """
-    try:
-        tickers = exchange.fetch_tickers()
+    # try:
+    #     tickers = exchange.fetch_tickers()
 
+    #     volume_list = []
+    #     for symbol, data in tickers.items():
+    #         if "USDT" in symbol and isinstance(data, dict) and 'quoteVolume' in data and 'last' in data:
+    #             volume = float(data['quoteVolume'])  # 24h trading volume in quote currency
+    #             price = float(data['last'])  # Current price of the asset
+                
+    #             if price > 0:  # Only select coins priced below $10
+    #                 volume_list.append((symbol, volume))
+
+    #     # Sort by highest volume
+    #     volume_list = sorted(volume_list, key=lambda x: x[1], reverse=True)
+
+    #     # Select top `limit` symbols
+    #     top_symbols = [symbol for symbol, _ in volume_list[:limit]]
+
+    #     logging.info(f"Top high-volume coins  selected: {top_symbols}")
+    #     return top_symbols
+    try:
         volume_list = []
+        tickers = exchange.fetch_tickers()
         for symbol, data in tickers.items():
             if "USDT" in symbol and isinstance(data, dict) and 'quoteVolume' in data and 'last' in data:
                 volume = float(data['quoteVolume'])  # 24h trading volume in quote currency
@@ -406,8 +425,9 @@ def fetch_top_movers(limit=1):
         volume_list = sorted(volume_list, key=lambda x: x[1], reverse=True)
 
         # Select top `limit` symbols
-        top_symbols = [symbol for symbol, _ in volume_list[:limit]]
-
+        top_symbols = [symbol for symbol, _ in volume_list[:10]]
+        print(top_symbols)
+        top_symbols = load_trading_pairs()
         logging.info(f"Top high-volume coins  selected: {top_symbols}")
         return top_symbols
     except Exception as e:
@@ -1463,7 +1483,7 @@ def should_trade(symbol, model, scaler, data, balance):
                             tensorboard_log="./ppo_logs/",  # Enables TensorBoard logging
                             )
             model.learn(
-            total_timesteps=200000,  # Train for 1M timesteps
+            total_timesteps=100000,  # Train for 1M timesteps
             callback=eval_callback,  # Add evaluation callback
             tb_log_name="ppo_crypto_trading"  # TensorBoard experiment name
             )
