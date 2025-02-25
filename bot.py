@@ -711,7 +711,7 @@ def place_order(symbol, side, size):
             unrealized_pnl = float(active_trade.get('unrealizedPnl', 0))
             logging.info(f"unrealized_pnl {unrealized_pnl}")
             logging.info(f"Active trade found: {side} {symbol} at {entry_price}, Unrealized PnL: {unrealized_pnl:.2f}%")
-            if unrealized_pnl <= 0 and positionI'side'] == binance_side :
+            if unrealized_pnl <= 0 and position['side'] == binance_side :
                     logging.info(f"Skipping trade as active position is not in profit.")
                     return None, None
         
